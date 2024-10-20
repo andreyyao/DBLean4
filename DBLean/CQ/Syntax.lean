@@ -3,22 +3,31 @@
 ! syntax of a conjunctive query
 -/
 import Mathlib.Data.Finset.Basic
+import DBLean.Utils
 
-section query_syntax
-    /- Schema -/
-    structure schema where
-        relSym : Type
-        arities : relSym -> Nat
+/- The type of database schema -/
+structure Schema where
+  relSym : Type
+  arities : relSym -> Nat
 
-    variable (sig : schema)
+variable (S : Schema)
 
-    /- Variables, i.e. x, y, z, w -/
-    variable (vars : Type)
+structure Atom (vars : Type) where
+  R : S.relSym
+  var_list : @Vect (S.arities R) vars
 
-    /-! An atom -/
-    def atom : Type := Σ (R : sig.relSym), (Fin (sig.arities R) -> vars)
+structure CQ where
+  vars : Type
+  head : List vars
+  body : List (Atom sig vars)
 
-    structure query where
-        head : List vars
-        body : List (atom sig vars)
-end query_syntax
+def Atom.map {vars1 vars2 : Type} (f : vars1 -> vars2) (A : Atom S vars1) : Atom S vars2 :=
+{ R := A.R, var_list := Vect.map f A.var_list }
+
+class homomorphism (q1 q2 : CQ) where
+  f : q1.vars -> q2.vars
+  body_cond : List.Forall (fun (A : Atom S q1.vars) => q2.body.Mem (Atom.map S f A)) q1.body
+  head_cond : q2.head = List.map f q1.head
+
+def CQ.contained (q1 q2 : CQ) : Prop :=
+    exists (_ : homomorphism S q1 q2), True
