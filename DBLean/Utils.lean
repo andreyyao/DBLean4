@@ -11,3 +11,5 @@ def Vect.map {A B : Type} (f : A -> B) (V : @Vect n A) : @Vect n B :=
 
 def Vect.mem {A : Type} (V : @Vect n A) (a : A) : Prop :=
   List.Mem a V.lst
+
+theorem len_transport {A : Type} {n m : Nat} (nm : n = m) : @Vect n A = @Vect m A := by rw [nm]
