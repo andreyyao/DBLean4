@@ -36,6 +36,14 @@ lemma Vect.empty_unique : ∀ (v : @Vect 0 A), v = Vect.empty := by
     have lst_nil := list_zero_nil lst len
     subst lst; rfl
 
+lemma Vect.comp_map {n : Nat} {A B C : Type} (f : A -> B) (g : B -> C) (v : @Vect n A) :
+  Vect.map g (Vect.map f v) = Vect.map (g ∘ f) v := by
+  unfold Vect.map
+  simp_rw [List.comp_map]
+
+lemma Vect.map_id {A : Type} : ∀ (v : @Vect n A), Vect.map id v = v := by
+  intro v; unfold Vect.map; simp_rw [List.map_id]
+
 /-- A vector of any elements from a finite type is itself finite -/
 theorem Vect.finite_finite {A : Type} : Finite A -> Finite (@Vect n A) := by
   intro H

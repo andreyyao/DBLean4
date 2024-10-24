@@ -10,7 +10,7 @@ structure Schema where
   relSym : Type
   arities : relSym -> Nat
 
-variable (S : Schema)
+variable {S : Schema}
 /- The output arity -/
 variable {outs : Nat}
 variable {V V1 V2 : Type}
@@ -19,20 +19,21 @@ variable {V V1 V2 : Type}
 namespace CQ_syntax
 
   /-- An Atom is a relation symbol with list of variables of the right arity -/
-  structure Atom where
+  structure Atom (S : Schema) (V : Type) where
     R : S.relSym
-    var_vec : @Vect (S.arities R) V
+    vars : @Vect (S.arities R) V
 
-  structure CQ where
+  structure CQ (V : Type) (outs : Nat) where
     head : @Vect outs V
     body : List (@Atom S V)
 
-  def Atom.map (f : V1 -> V2) (A : @Atom S V1) : @Atom S V2 :=
-  { R := A.R, var_vec := Vect.map f A.var_vec }
+  def Atom.map (f : V1 -> V2) (A : Atom S V1) : Atom S V2 :=
+  { R := A.R, vars := Vect.map f A.vars }
 
-  class homomorphism (q1 : @CQ S outs V1) (q2 : @CQ S outs V2) where
-    f : vars1 -> vars2
-    body_cond : List.Forall (fun (A : Atom S) => q2.body.Mem (Atom.map S f A)) q1.body
+  class homomorphism {V1 V2 : Type} (q1 : CQ V1 outs) (q2 : CQ V2 outs) where
+    f : V1 -> V2
+    -- body_cond : ∀ A ∈ q1.body, q2.body.Mem (Atom.map f A)
+    body_cond : List.Forall (fun (A : Atom S V1) => q2.body.Mem (Atom.map f A)) q1.body
     head_cond : q2.head = Vect.map f q1.head
 
 end CQ_syntax
@@ -43,21 +44,22 @@ namespace CQ_semantics
   variable {S : Schema}
   /- Variable names -/
   variable {V : Type}
-  /- The active domain is a subset of the domain -/
-  variable {D : Type}
 
   /-- An instance is a set of vectors of the right arity for each relational symbol -/
-  def Instance := Π (R : S.relSym), Set (@Vect (S.arities R) D)
+  def Instance (D : Type) := Π (R : S.relSym), Set (@Vect (S.arities R) D)
 
   open Set CQ_syntax
+
   /-- The semantics is a set of output tuples obtained by valuations-/
-  def semantics (q : @CQ S outs V) (I : @Instance S D) : Set (@Vect outs D) :=
-  { t |
+  def semantics {D : Type} (q : @CQ S V outs) (I : @Instance S D) : Set (@Vect outs D) :=
+  { t : Vect D |
     ∃ v : V -> D,
     t = Vect.map v q.head /\
-    ∀ A ∈ q.body, (Vect.map v A.var_vec) ∈ (I A.R) }
+    ∀ A ∈ q.body, (Vect.map v A.vars) ∈ (I A.R) }
 
-  def contained (q1 q2 : @CQ S outs V) := ∀ I : @Instance S D, (semantics q1 I) ⊆ (semantics q2 I)
+  @[simp]
+  def contained (D : Type) (q1 : @CQ S V1 outs) (q2 : @CQ S V2 outs) :=
+    ∀ (I : @Instance S D), (semantics q1 I) ⊆ (semantics q2 I)
 
 end CQ_semantics
 
@@ -66,9 +68,41 @@ open CQ_syntax CQ_semantics Set
 
 lemma helper {R1 R2 : S.relSym} {A : Type} (eq : R1 = R2) : @Vect (S.arities R1) A = @Vect (S.arities R2) A := by rw [eq]
 
-def canonical_DB (q : @CQ S outs V) : @Instance S V :=
+/-- The canonical database `D[q]` of a query `[q]` -/
+def canonical_DB (q : @CQ S V outs) : @Instance S V :=
   fun (R : S.relSym) =>
   { t : @Vect (S.arities R) V |
-    ∃ A ∈ q.body, ∃ (eq : A.R = R), t = cast (helper S eq) A.var_vec }
+    ∃ A ∈ q.body, ∃ (eq : A.R = R), t = cast (helper eq) A.vars }
 
--- lemma homomorphism_1_2 : ∀ (q1 : @CQ S outs V1 vars1) (q2 : @CQ S outs V2 vars2) (I : @Instance S dom adom), [homomorphism S vars1 vars2 q1 q2] -> @contained _ _ _ _ dom adom q1 q2 := by
+/-- The head of a query `q` is an element of `q(D[q])`-/
+lemma head_in_canon_db_eval : ∀ (q : @CQ S V outs), q.head ∈ semantics q (canonical_DB q) := by
+  intro q
+  unfold semantics canonical_DB
+  rw [Set.mem_setOf_eq]
+  exists id;
+  apply And.intro
+  . rw [Vect.map_id]
+  . intro A mem; rw [Vect.map_id, Set.mem_setOf_eq]
+    exists A; aesop
+
+variable (D : Type)
+variable (q1 : @CQ S V1 outs)
+variable (q2 : @CQ S V2 outs)
+
+lemma homomorphism_1_3 : q1.head ∈ semantics q2 (canonical_DB q1) -> contained V1 q1 q2 := by
+  rw [semantics, Set.mem_setOf_eq]
+  intro mem
+  sorry
+
+lemma homomorphism_2_1 [h : homomorphism q2 q1] : contained D q1 q2 := by
+  unfold contained; intro I; rw [subset_def]; intros t mem
+  rw [semantics, Set.mem_setOf_eq] at mem
+  rw [semantics, Set.mem_setOf_eq]
+  let ⟨ν1, ⟨Eq, BodEq⟩⟩ := mem
+  exists (ν1 ∘ h.f)
+  apply And.intro
+  . rw [Eq, h.head_cond, Vect.comp_map]
+  . intros A2 mem2
+    have mem1 := List.forall_iff_forall_mem.1 h.body_cond A2 mem2
+    rw [<- Vect.comp_map]
+    exact BodEq (Atom.map (homomorphism.f q2 q1) A2) mem1
