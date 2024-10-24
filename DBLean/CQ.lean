@@ -2,8 +2,6 @@
 ! This module contains the basic definitions for defining the
 ! syntax of a conjunctive query
 -/
-import Mathlib.Data.Finset.Basic
-import Mathlib.Data.Finset.Pi
 import DBLean.Utils
 
 /-- The type of database schema specifies a collection of relational symbols
@@ -28,6 +26,8 @@ namespace CQ_syntax
   structure CQ where
     head : @Vect outs vars
     body : List (Atom S vars)
+
+  def Atom.eval (v : vars -> adom) :=
 
   def Atom.map (f : vars1 -> vars2) (A : Atom S vars1) : Atom S vars2 :=
   { R := A.R, var_vec := Vect.map f A.var_vec }
