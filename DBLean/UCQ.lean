@@ -1,4 +1,5 @@
 import DBLean.CQ
+import DBLean.Utils
 import Mathlib.Algebra.Ring.Defs
 import Mathlib.Algebra.BigOperators.Finprod
 
@@ -6,36 +7,34 @@ variable {S : Schema}
 /- The output arity -/
 variable {outs : Nat}
 variable {V : Type}
-variable (vars : Set V)
 
 open CQ_syntax
 
 /-- A UCQ is a list of CQ's with the same variable set and output arity -/
 @[reducible] /- Makes the definition transparent -/
-def UCQ := List (@CQ S outs V vars)
+def UCQ := List (@CQ S outs V)
 
 namespace UCQ_set_semantics
 
-  variable {dom : Type}
-  variable {adom : Set dom}
+  variable {D : Type}
+  variable {adom : Set D}
 
   def Instance := @CQ_semantics.Instance
 
   open Set
-  def set_semantics (qs : @UCQ S outs V vars) (I : @Instance S dom adom) : Set (@Vect outs adom) :=
+  def set_semantics (qs : @UCQ S outs V) (I : @Instance S D) : Set (@Vect outs D) :=
   { t |
     ∃ q ∈ qs,
-    ∃ v : vars -> adom,
+    ∃ v : V -> D,
     Vect.map v q.head = t /\
     ∀ A ∈ q.body, (Vect.map v A.var_vec) ∈ (I A.R) }
 
 end UCQ_set_semantics
 
 namespace UCQ_semiring_semantics
-  variable {dom : Type}
-  variable {adom : Set dom}
-  variable {adom_fin : Finite adom}
-  variable {vars_fin : Finite vars}
+  variable {V : Type}
+  variable {D : Type}
+  variable (V_fin : Finite V) (D_fin : Finite D)
   /- Semiring K -/
   variable {K : Type}
   variable {K_SR : Semiring K}
@@ -44,19 +43,15 @@ namespace UCQ_semiring_semantics
     R : S.relSym
     val : @Vect (S.arities R) adom
 
-  def valuation := vars -> adom
+  def valuation := V -> D
 
   /-- An instance is a map from a relation symbol to its corresponding K-relation. -/
-  def Instance := Π (R : S.relSym), @Vect (S.arities R) adom -> K
+  def Instance := Π (R : S.relSym), @Vect (S.arities R) D -> K
 
-  /- TODO change to using Finset -/
-  /-- Semiring semantics for CQ -/
-  @[irreducible]
   noncomputable
-  def semiring_semantics (q : @CQ S outs V vars) (I : @Instance S dom adom K) (t : @Vect outs adom) :=
-    let valuations := { v : vars -> adom | Vect.map v q.head = t }
-    finsum (fun v : valuations => List.foldl (fun (acc : K) (A : Atom S vars) => acc + (I A.R (Vect.map v A.var_vec))) 0 q.body)
-
-
+  def semiring_semantics (q : CQ S) (I : Instance) (t : @Vect outs D) :=
+    let valuations := { v : V -> D | Vect.map v q.head = t }
+    let valuations' := Set.Finite.toFinset (finite_impl_finite_set valuations)
+    Finset.sum valuations' (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S) => acc + (I A.R (Vect.map v A.var_vec))) 0 q.body)
 
 end UCQ_semiring_semantics

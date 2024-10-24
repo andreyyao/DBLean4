@@ -36,6 +36,7 @@ lemma Vect.empty_unique : ∀ (v : @Vect 0 A), v = Vect.empty := by
     have lst_nil := list_zero_nil lst len
     subst lst; rfl
 
+/-- A vector of any elements from a finite type is itself finite -/
 theorem Vect.finite_finite {A : Type} : Finite A -> Finite (@Vect n A) := by
   intro H
   induction n with
@@ -56,4 +57,12 @@ theorem Vect.finite_finite {A : Type} : Finite A -> Finite (@Vect n A) := by
     let toFun := fun (v : @Vect n A) => 0
     sorry
 
-lemma function_finite {A B : Type} : Finite A -> Finite B -> Finite (A -> B) := by intros; exact Pi.finite
+/-- A function between two finite types is finite itself -/
+lemma fun_finite {A B : Type} : Finite A -> Finite B -> Finite (A -> B) :=
+  by intros; exact Pi.finite
+
+open Set
+lemma finite_impl_finite_set {A : Type*} [Finite A] (S : Set A) : Finite S :=
+  have FAS : Finite (@Set.univ A) := by apply Set.finite_univ
+  have subset : Subset S (@Set.univ A) := by apply Set.subset_univ
+  (Finite.subset FAS subset)
