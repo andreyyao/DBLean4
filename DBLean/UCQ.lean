@@ -13,7 +13,7 @@ open CQ_syntax
 
 /-- A UCQ is a list of CQ's with the same variable set and output arity -/
 @[reducible] /- Makes the definition transparent -/
-def UCQ := List (@CQ S V outs)
+def UCQ V outs := List (@CQ S V outs)
 
 namespace UCQ_set_semantics
 
@@ -33,9 +33,10 @@ namespace UCQ_set_semantics
 end UCQ_set_semantics
 
 namespace UCQ_semiring_semantics
-  variable {V : Type}
-  variable {D : Type}
-  variable (V_fin : Finite V) (D_fin : Finite D)
+  variable {V : Type} [Fintype V]
+  variable {V1 : Type} [Fintype V1]
+  variable {V2 : Type} [Fintype V2]
+  variable {D : Type} [Fintype D]
   /- Semiring K -/
   variable {K : Type}
   variable [K_SR : Semiring K]
@@ -50,18 +51,22 @@ namespace UCQ_semiring_semantics
   def Instance := Π (R : S.relSym), @Vect (S.arities R) D -> K
 
   noncomputable
-  def semiring_semantics (q : CQ V outs) (I : Instance) (t : @Vect outs D) :=
+  def CQ_semiring_semantics (q : @CQ S V outs) (I : @Instance S D K) (t : @Vect outs D) : K :=
     let valuations := { v : V -> D | Vect.map v q.head = t }
     let valuations' := Set.Finite.toFinset (finite_impl_finite_set valuations)
-    Finset.sum valuations' (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S V) => acc + (I A.R (Vect.map v A.vars))) 0 q.body)
+    Finset.sum valuations' (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S V) => acc * (I A.R (Vect.map v A.vars))) 1 q.body)
 
+  noncomputable
+  def semiring_semantics (qs : @UCQ S V outs) (I : @Instance S D K) (t : @Vect outs D) : K :=
+    List.foldl (fun acc q => acc + (CQ_semiring_semantics q I t)) 0 qs
+
+  @[simp]
   def natural_order (K : Type) [Semiring K] : K -> K -> Prop :=
     fun (a b : K) => ∃ (c : K), a + c = b
 
-  instance : Preorder K where
-    le := natural_order K
-    le_refl := by intro a; exists 0; simp
-    le_trans := by
+  instance KIsPreorder : IsPreorder K (natural_order K) where
+    refl := by intro a; exists 0; simp
+    trans := by
       intros a b c le1 le2
       let ⟨k1, E1⟩ := le1
       let ⟨k2, E2⟩ := le2
@@ -70,6 +75,15 @@ namespace UCQ_semiring_semantics
       rw [E1]
       exact E2
 
-  -- def contained (q1 : CQ V1 outs) (q2 : CQ V2 outs) := sorry
+  instance : Preorder K where
+    le := natural_order K
+    le_refl := KIsPreorder.refl
+    le_trans := KIsPreorder.trans
+
+  def naturally_ordered := IsPartialOrder K (natural_order K)
+
+  def contained (qs1 : @UCQ S V1 outs) (qs2 : @UCQ S V2 outs) :=
+    ∀ (I : Instance) (t : @Vect outs D),
+    (natural_order K) (semiring_semantics qs1 I t) (semiring_semantics qs2 I t)
 
 end UCQ_semiring_semantics
