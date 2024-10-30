@@ -72,10 +72,7 @@ namespace UCQ_semiring_semantics
       intros a b c le1 le2
       let ⟨k1, E1⟩ := le1
       let ⟨k2, E2⟩ := le2
-      exists (k1 + k2)
-      rw [<- K_SR.add_assoc]
-      rw [E1]
-      exact E2
+      exists (k1 + k2); rw [<- K_SR.add_assoc, E1]; exact E2
 
   instance : Preorder K where
     le := natural_order K
@@ -135,19 +132,14 @@ def annotate_with_bool : @Instance S D Bool :=
 lemma entry_true_impl_bool_summation_true {D : Type}: ∀ (S : Finset D) (f : D -> Bool),
   (∃ s ∈ S, f s = true) → (S.sum f = true) := by
   intros S f ex
-  rcases ex with ⟨s, eq⟩
-  rw [Finset.sum_eq_fold]
-  apply Eq.symm
-  have and_true_eq : ∀ b : Bool, true && b → true = b := by
-    intros b eq; rw [<- eq]; rfl
-  apply and_true_eq
-  apply (@Finset.fold_op_rel_iff_or D Bool or _ _ f false S (fun (b1 b2 : Bool) => b1 && b2) _ true).2
-  right; aesop
-  /- Going back to prove this proof obligation -/
-  intros x y z; simp
-  apply Iff.intro
-  . intro H; cases x <;> cases y <;> cases z <;> simp at H <;> aesop
-  . intro H; cases x <;> cases y <;> cases z <;> aesop
+  apply Finset.sup_eq_top_iff.mpr at ex
+  exact ex
+
+lemma bool_summation_true_impl_entry_true {D : Type}: ∀ (S : Finset D) (f : D -> Bool),
+  (S.sum f = true) → (∃ s ∈ S, f s = true) := by
+  intros S f eq;
+  rw [Finset.sum_eq_fold] at eq
+  exact Finset.sup_eq_top_iff.mp eq /-Huh, nice find-/
 
 lemma list_fold_lattice_top {α β : Type} [DistribLattice α] [BoundedOrder α] :
   ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊔ f e) ⊤ l = ⊤ := by
@@ -156,14 +148,43 @@ lemma list_fold_lattice_top {α β : Type} [DistribLattice α] [BoundedOrder α]
   | nil => rfl
   | cons hd tl IH => simp; exact IH
 
+lemma list_fold_lattice_bot {α β : Type} [DistribLattice α] [BoundedOrder α] :
+  ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊓ f e) ⊥ l = ⊥ := by
+  intros f l
+  induction l with
+  | nil => rfl
+  | cons hd tl IH => simp; exact IH
+
+lemma list_fold_true_impl_exists_true {β : Type} : ∀ (f : β -> Bool) (l : List β),
+  List.foldl (fun acc e => acc + f e) 0 l = 1 →
+  ∃ e ∈ l, f e = 1 := by
+  intros f l eq; induction l with
+  | nil => contradiction
+  | cons hd tl IHtl => simp; cases val : (f hd) with
+    | true => aesop
+    | false => right; aesop
+
+lemma list_fold_true_impl_forall_true {β : Type} : ∀ (f : β -> Bool) (l : List β),
+  List.foldl (fun acc e => acc ⊓ f e) ⊤ l = ⊤ →
+  ∀ e ∈ l, f e = ⊤ := by
+  intros f l eq; induction l with
+  | nil => simp
+  | cons hd tl IHtl => simp; cases val : (f hd) with
+    | true => aesop
+    | false =>
+      simp at eq; rw [val] at eq
+      have bruh := list_fold_lattice_bot f tl; simp at bruh; rw [eq] at bruh
+      apply And.intro <;> contradiction
+
+
 /-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if `t` is an element
-of the set-semantics of UCQ of `qs` and `I`, then under the semiring semantics
-applied to Booleans, `qs(I)(t)` has the value `true` -/
+of the set semantics of UCQ of `qs` and `I`, then under the semiring semantics
+applied to Bool, `qs(I)(t)` has the value `true` -/
 lemma set_semantics_impl_bool_semiring_semantics [Fintype D] :
-  ∀ (qs : @UCQ S V outs) (R : S.relSym) (t : @Vect outs D),
+  ∀ (qs : @UCQ S V outs) (t : @Vect outs D),
   t ∈ UCQ_set_semantics.set_semantics qs I →
   semiring_semantics qs (annotate_with_bool I dec) t = true := by
-  intros qs _ t t_mem
+  intros qs t t_mem
   unfold UCQ_set_semantics.set_semantics at t_mem
   rw [Set.mem_setOf_eq] at t_mem
   rcases t_mem with ⟨q, ⟨q_mem, ⟨v, ⟨head_cond, body_cond⟩⟩⟩⟩
@@ -193,13 +214,35 @@ lemma set_semantics_impl_bool_semiring_semantics [Fintype D] :
       . apply list_fold_lattice_top
 
 
+/-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if under the semiring
+semantics applied to Bool, `qs(I)(t)` has the value `true`, then `t` is an
+element of the set semantics of UCQ of `qs` and `I` -/
 lemma bool_semiring_semantics_impl_set_semantics [Fintype D] :
-  ∀ (qs : @UCQ S V outs) (R : S.relSym) (t : @Vect outs D),
+  ∀ (qs : @UCQ S V outs) (t : @Vect outs D),
   semiring_semantics qs (annotate_with_bool I dec) t = true →
   t ∈ UCQ_set_semantics.set_semantics qs I := by
-  intros qs R t eq
-  sorry
+  intros qs t eq
+  unfold semiring_semantics CQ_semiring_semantics at eq
+  apply list_fold_true_impl_exists_true at eq
+  rcases eq with ⟨q, ⟨q_mem, isT⟩⟩; simp at isT
+  apply bool_summation_true_impl_entry_true at isT; simp at isT
+  rcases isT with ⟨v, ⟨head_cond, body_cond⟩⟩
+  apply list_fold_true_impl_forall_true at body_cond
+  unfold UCQ_set_semantics.set_semantics
+  rw [Set.mem_setOf_eq]
+  exists q, q_mem, v; apply And.intro
+  . exact head_cond
+  . intro A A_mem; specialize body_cond A A_mem;
+    unfold annotate_with_bool at body_cond; aesop
 
 
-
-theorem set_semantics_iff_bool_semantics : True
+/-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, `qs(I)(t)` has the
+value `true` under the semiring semantics applied to Bool if and only if
+`t` is an element of the set semantics of UCQ of `qs` and `I` -/
+theorem set_semantics_iff_bool_semantics [Fintype D] :
+∀ (qs : @UCQ S V outs) (t : @Vect outs D),
+  semiring_semantics qs (annotate_with_bool I dec) t = true ↔
+  t ∈ UCQ_set_semantics.set_semantics qs I := by
+  intros qs t; apply Iff.intro
+  . apply bool_semiring_semantics_impl_set_semantics
+  . apply set_semantics_impl_bool_semiring_semantics
