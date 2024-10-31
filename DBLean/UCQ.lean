@@ -141,14 +141,14 @@ lemma bool_summation_true_impl_entry_true {D : Type}: ∀ (S : Finset D) (f : D 
   rw [Finset.sum_eq_fold] at eq
   exact Finset.sup_eq_top_iff.mp eq /-Huh, nice find-/
 
-lemma list_fold_lattice_top {α β : Type} [DistribLattice α] [BoundedOrder α] :
+lemma list_fold_lattice_top {α β : Type} [DistribLattice α] [OrderTop α] :
   ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊔ f e) ⊤ l = ⊤ := by
   intros f l
   induction l with
   | nil => rfl
   | cons hd tl IH => simp; exact IH
 
-lemma list_fold_lattice_bot {α β : Type} [DistribLattice α] [BoundedOrder α] :
+lemma list_fold_lattice_bot {α β : Type} [DistribLattice α] [OrderBot α] :
   ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊓ f e) ⊥ l = ⊥ := by
   intros f l
   induction l with
@@ -164,18 +164,41 @@ lemma list_fold_true_impl_exists_true {β : Type} : ∀ (f : β -> Bool) (l : Li
     | true => aesop
     | false => right; aesop
 
-lemma list_fold_true_impl_forall_true {β : Type} : ∀ (f : β -> Bool) (l : List β),
+lemma list_fold_init_lt_top_impl_lt_top {α β : Type} [DistribLattice β] [OrderTop β] :
+  ∀ (f : α -> β) (l : List α) (i : β), i < ⊤ →
+  List.foldl (fun acc e => acc ⊓ f e) i l < ⊤ := by
+  intros f l i lt; induction l with
+  | nil => simp; exact lt
+  | cons hd tl IH =>
+    rw [<- List.foldl_map] at *; simp; rw [inf_comm, List.foldl_assoc] at *
+    generalize List.foldl Inf.inf i (List.map f tl) = x at *
+    have _ : f hd ⊓ x ≤ x := by apply inf_le_right
+    have _ : x ≤ ⊤ := (le_of_lt IH)
+    apply lt_of_le_of_ne
+    . aesop
+    . aesop
+
+lemma list_fold_top_impl_forall_top {α β : Type} [DistribLattice β] [OrderTop β] [Dec: DecidableEq β]:
+  ∀ (f : α -> β) (l : List α),
   List.foldl (fun acc e => acc ⊓ f e) ⊤ l = ⊤ →
-  ∀ e ∈ l, f e = ⊤ := by
+  (∀ e ∈ l, f e = ⊤) := by
   intros f l eq; induction l with
   | nil => simp
-  | cons hd tl IHtl => simp; cases val : (f hd) with
-    | true => aesop
-    | false =>
-      simp at eq; rw [val] at eq
-      have bruh := list_fold_lattice_bot f tl; simp at bruh; rw [eq] at bruh
-      apply And.intro <;> contradiction
+  | cons hd tl IHtl => simp; simp at eq; cases (Dec (f hd) ⊤) with
+    | isTrue h => aesop
+    | isFalse h =>
+      apply lt_top_iff_ne_top.mpr at h
+      have fold_lt := list_fold_init_lt_top_impl_lt_top f tl (f hd) h
+      aesop
 
+lemma forall_top_impl_list_fold_top {α β : Type} [DistribLattice β] [OrderTop β] :
+  ∀ (f : α -> β) (l : List α),
+  (∀ e ∈ l, f e = ⊤) →
+  List.foldl (fun acc e => acc ⊓ f e) ⊤ l = ⊤ := by
+  intros f l H; induction l with
+  | nil => rfl
+  | cons hd tl IHtl =>
+    simp; simp at H; rcases H with ⟨eq, alltl⟩; rw [eq]; apply IHtl alltl
 
 /-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if `t` is an element
 of the set semantics of UCQ of `qs` and `I`, then under the semiring semantics
@@ -194,14 +217,9 @@ lemma set_semantics_impl_bool_semiring_semantics [Fintype D] :
     apply entry_true_impl_bool_summation_true
     exists v; simp; apply And.intro
     . exact head_cond
-    . generalize q.body = atoms at *; induction atoms with
-      | nil => rfl
-      | cons hd tl IHtl =>
-        simp
-        simp at body_cond; rcases body_cond with ⟨hd_cond, tl_cond⟩
-        have eq : annotate_with_bool I dec hd.R (Vect.map v hd.vars) = 1 := by
-          unfold annotate_with_bool; aesop
-        rw [eq]; apply IHtl; aesop
+    . apply forall_top_impl_list_fold_top; intros A A_mem
+      specialize body_cond A A_mem
+      unfold annotate_with_bool; aesop
   induction qs with
   | nil => contradiction
   | cons hd tl IHtl => simp; simp at q_mem; cases q_mem with
@@ -227,7 +245,7 @@ lemma bool_semiring_semantics_impl_set_semantics [Fintype D] :
   rcases eq with ⟨q, ⟨q_mem, isT⟩⟩; simp at isT
   apply bool_summation_true_impl_entry_true at isT; simp at isT
   rcases isT with ⟨v, ⟨head_cond, body_cond⟩⟩
-  apply list_fold_true_impl_forall_true at body_cond
+  apply list_fold_top_impl_forall_top at body_cond
   unfold UCQ_set_semantics.set_semantics
   rw [Set.mem_setOf_eq]
   exists q, q_mem, v; apply And.intro
