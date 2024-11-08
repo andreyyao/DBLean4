@@ -17,7 +17,7 @@ open CQ_syntax
 
 /-- A UCQ is a list of CQ's with the same variable set and output arity -/
 @[reducible] /- Makes the definition transparent -/
-def UCQ V outs := List (@CQ S V outs)
+def UCQ V outs := List (@CQ S V outs)/- Do all parts of the union need the same output arity?-/
 
 namespace UCQ_set_semantics
 
@@ -56,7 +56,7 @@ namespace UCQ_semiring_semantics
 
   noncomputable
   def CQ_semiring_semantics (q : @CQ S V outs) (I : @Instance S D K) (t : @Vect outs D) : K :=
-    let valuations := { v : V -> D | Vect.map v q.head = t }
+    let valuations := { v : V -> D | Vect.map v q.head = t }/-Why more than 1? -/
     let valuations' := Set.Finite.toFinset (finite_impl_finite_set valuations)
     valuations'.sum (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S V) => acc * (I A.R (Vect.map v A.vars))) 1 q.body)
 
