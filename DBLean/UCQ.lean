@@ -3,6 +3,8 @@ import DBLean.Utils
 import Mathlib.Order.Defs
 import Mathlib.Algebra.Ring.Defs
 import Mathlib.Algebra.BigOperators.Finprod
+import Mathlib.Order.BooleanAlgebra
+import Mathlib.Order.Lattice
 
 variable {S : Schema}
 /- The output arity -/
@@ -54,7 +56,7 @@ namespace UCQ_semiring_semantics
   def CQ_semiring_semantics (q : @CQ S V outs) (I : @Instance S D K) (t : @Vect outs D) : K :=
     let valuations := { v : V -> D | Vect.map v q.head = t }/-Why more than 1? -/
     let valuations' := Set.Finite.toFinset (finite_impl_finite_set valuations)
-    Finset.sum valuations' (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S V) => acc * (I A.R (Vect.map v A.vars))) 1 q.body)
+    valuations'.sum (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S V) => acc * (I A.R (Vect.map v A.vars))) 1 q.body)
 
   noncomputable
   def semiring_semantics (qs : @UCQ S V outs) (I : @Instance S D K) (t : @Vect outs D) : K :=
@@ -70,10 +72,7 @@ namespace UCQ_semiring_semantics
       intros a b c le1 le2
       let ⟨k1, E1⟩ := le1
       let ⟨k2, E2⟩ := le2
-      exists (k1 + k2)
-      rw [<- K_SR.add_assoc]
-      rw [E1]
-      exact E2
+      exists (k1 + k2); rw [<- K_SR.add_assoc, E1]; exact E2
 
   instance : Preorder K where
     le := natural_order K
@@ -87,3 +86,181 @@ namespace UCQ_semiring_semantics
     (natural_order K) (semiring_semantics qs1 I t) (semiring_semantics qs2 I t)
 
 end UCQ_semiring_semantics
+
+@[simp]
+def Bool.nsmul : Nat -> Bool -> Bool
+| .zero => fun _ => false
+| .succ n => fun b => b || (Bool.nsmul n b)
+
+instance : Semiring Bool where
+  add := or
+  add_assoc := by intros; exact Bool.or_assoc _ _ _
+  zero := false
+  zero_add := by intros; exact Bool.false_or _
+  add_zero := by intros; exact Bool.or_false _
+  add_comm := by intros; exact Bool.or_comm _ _
+  mul := and
+  mul_assoc := by intros; exact Bool.and_assoc _ _ _
+  one := true
+  one_mul := by intros; exact Bool.true_and _
+  mul_one := by intros; exact Bool.and_true _
+  left_distrib := by intros; exact Bool.and_or_distrib_left _ _ _
+  right_distrib := by intros; exact Bool.and_or_distrib_right _ _ _
+  zero_mul := by intros; exact Bool.false_and _
+  mul_zero := by intros; exact Bool.and_false _
+  nsmul := Bool.nsmul
+  nsmul_zero := by intro b; rfl
+  nsmul_succ := by intros n b; simp; rw [Bool.or_comm]; rfl
+
+instance : BoundedOrder Bool := by infer_instance
+
+open UCQ_semiring_semantics
+
+variable {outs : Nat}
+variable {V : Type} [Fintype V]
+variable {D : Type} [Fintype D]
+variable {S : Schema} {D : Type}
+variable (I : @UCQ_set_semantics.Instance S D)
+variable (dec : ∀ (R : S.relSym) (t : @Vect (S.arities R) D), Decidable (t ∈ I R))
+
+/- Provided that a UCQ instance I maps each R to a set with decidable membership,
+ - annotate_with_bool is the UCQ semiring semantics that is the indicator function
+ - on each tuple corresponding to its membership in I -/
+def annotate_with_bool : @Instance S D Bool :=
+  fun (R : S.relSym) (t : @Vect (S.arities R) D) => t ∈ I R
+
+lemma entry_true_impl_bool_summation_true {D : Type}: ∀ (S : Finset D) (f : D -> Bool),
+  (∃ s ∈ S, f s = true) → (S.sum f = true) := by
+  intros S f ex
+  apply Finset.sup_eq_top_iff.mpr at ex
+  exact ex
+
+lemma bool_summation_true_impl_entry_true {D : Type}: ∀ (S : Finset D) (f : D -> Bool),
+  (S.sum f = true) → (∃ s ∈ S, f s = true) := by
+  intros S f eq;
+  rw [Finset.sum_eq_fold] at eq
+  exact Finset.sup_eq_top_iff.mp eq /-Huh, nice find-/
+
+lemma list_fold_lattice_top {α β : Type} [DistribLattice α] [OrderTop α] :
+  ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊔ f e) ⊤ l = ⊤ := by
+  intros f l
+  induction l with
+  | nil => rfl
+  | cons hd tl IH => simp; exact IH
+
+lemma list_fold_lattice_bot {α β : Type} [DistribLattice α] [OrderBot α] :
+  ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊓ f e) ⊥ l = ⊥ := by
+  intros f l
+  induction l with
+  | nil => rfl
+  | cons hd tl IH => simp; exact IH
+
+lemma list_fold_true_impl_exists_true {β : Type} : ∀ (f : β -> Bool) (l : List β),
+  List.foldl (fun acc e => acc + f e) 0 l = 1 →
+  ∃ e ∈ l, f e = 1 := by
+  intros f l eq; induction l with
+  | nil => contradiction
+  | cons hd tl IHtl => simp; cases val : (f hd) with
+    | true => aesop
+    | false => right; aesop
+
+lemma list_fold_init_lt_top_impl_lt_top {α β : Type} [DistribLattice β] [OrderTop β] :
+  ∀ (f : α -> β) (l : List α) (i : β), i < ⊤ →
+  List.foldl (fun acc e => acc ⊓ f e) i l < ⊤ := by
+  intros f l i lt; induction l with
+  | nil => simp; exact lt
+  | cons hd tl IH =>
+    rw [<- List.foldl_map] at *; simp; rw [inf_comm, List.foldl_assoc] at *
+    generalize List.foldl Inf.inf i (List.map f tl) = x at *
+    have _ : f hd ⊓ x ≤ x := by apply inf_le_right
+    have _ : x ≤ ⊤ := (le_of_lt IH)
+    apply lt_of_le_of_ne
+    . aesop
+    . aesop
+
+lemma list_fold_top_impl_forall_top {α β : Type} [DistribLattice β] [OrderTop β] [Dec: DecidableEq β]:
+  ∀ (f : α -> β) (l : List α),
+  List.foldl (fun acc e => acc ⊓ f e) ⊤ l = ⊤ →
+  (∀ e ∈ l, f e = ⊤) := by
+  intros f l eq; induction l with
+  | nil => simp
+  | cons hd tl IHtl => simp; simp at eq; cases (Dec (f hd) ⊤) with
+    | isTrue h => aesop
+    | isFalse h =>
+      apply lt_top_iff_ne_top.mpr at h
+      have fold_lt := list_fold_init_lt_top_impl_lt_top f tl (f hd) h
+      aesop
+
+lemma forall_top_impl_list_fold_top {α β : Type} [DistribLattice β] [OrderTop β] :
+  ∀ (f : α -> β) (l : List α),
+  (∀ e ∈ l, f e = ⊤) →
+  List.foldl (fun acc e => acc ⊓ f e) ⊤ l = ⊤ := by
+  intros f l H; induction l with
+  | nil => rfl
+  | cons hd tl IHtl =>
+    simp; simp at H; rcases H with ⟨eq, alltl⟩; rw [eq]; apply IHtl alltl
+
+/-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if `t` is an element
+of the set semantics of UCQ of `qs` and `I`, then under the semiring semantics
+applied to Bool, `qs(I)(t)` has the value `true` -/
+lemma set_semantics_impl_bool_semiring_semantics [Fintype D] :
+  ∀ (qs : @UCQ S V outs) (t : @Vect outs D),
+  t ∈ UCQ_set_semantics.set_semantics qs I →
+  semiring_semantics qs (annotate_with_bool I dec) t = true := by
+  intros qs t t_mem
+  unfold UCQ_set_semantics.set_semantics at t_mem
+  rw [Set.mem_setOf_eq] at t_mem
+  rcases t_mem with ⟨q, ⟨q_mem, ⟨v, ⟨head_cond, body_cond⟩⟩⟩⟩
+  unfold semiring_semantics
+  have hehe : CQ_semiring_semantics q (annotate_with_bool I dec) t = true := by
+    unfold CQ_semiring_semantics; simp
+    apply entry_true_impl_bool_summation_true
+    exists v; simp; apply And.intro
+    . exact head_cond
+    . apply forall_top_impl_list_fold_top; intros A A_mem
+      specialize body_cond A A_mem
+      unfold annotate_with_bool; aesop
+  induction qs with
+  | nil => contradiction
+  | cons hd tl IHtl => simp; simp at q_mem; cases q_mem with
+    | inl eq =>
+      rw [<- eq]; rw [hehe]; apply list_fold_lattice_top
+    | inr mem =>
+      specialize IHtl mem; clear mem;
+      cases (CQ_semiring_semantics hd (annotate_with_bool I dec) t)
+      . exact IHtl
+      . apply list_fold_lattice_top
+
+
+/-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if under the semiring
+semantics applied to Bool, `qs(I)(t)` has the value `true`, then `t` is an
+element of the set semantics of UCQ of `qs` and `I` -/
+lemma bool_semiring_semantics_impl_set_semantics [Fintype D] :
+  ∀ (qs : @UCQ S V outs) (t : @Vect outs D),
+  semiring_semantics qs (annotate_with_bool I dec) t = true →
+  t ∈ UCQ_set_semantics.set_semantics qs I := by
+  intros qs t eq
+  unfold semiring_semantics CQ_semiring_semantics at eq
+  apply list_fold_true_impl_exists_true at eq
+  rcases eq with ⟨q, ⟨q_mem, isT⟩⟩; simp at isT
+  apply bool_summation_true_impl_entry_true at isT; simp at isT
+  rcases isT with ⟨v, ⟨head_cond, body_cond⟩⟩
+  apply list_fold_top_impl_forall_top at body_cond
+  unfold UCQ_set_semantics.set_semantics
+  rw [Set.mem_setOf_eq]
+  exists q, q_mem, v; apply And.intro
+  . exact head_cond
+  . intro A A_mem; specialize body_cond A A_mem;
+    unfold annotate_with_bool at body_cond; aesop
+
+
+/-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, `qs(I)(t)` has the
+value `true` under the semiring semantics applied to Bool if and only if
+`t` is an element of the set semantics of UCQ of `qs` and `I` -/
+theorem set_semantics_iff_bool_semantics [Fintype D] :
+∀ (qs : @UCQ S V outs) (t : @Vect outs D),
+  semiring_semantics qs (annotate_with_bool I dec) t = true ↔
+  t ∈ UCQ_set_semantics.set_semantics qs I := by
+  intros qs t; apply Iff.intro
+  . apply bool_semiring_semantics_impl_set_semantics
+  . apply set_semantics_impl_bool_semiring_semantics
