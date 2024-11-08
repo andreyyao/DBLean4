@@ -1,7 +1,9 @@
 import DBLean.CQ
 import DBLean.Utils
 import Mathlib.Order.Defs
+import Mathlib.Algebra.Polynomial.Basic
 import Mathlib.Algebra.Ring.Defs
+import Mathlib.Algebra.Ring.Nat
 import Mathlib.Algebra.BigOperators.Finprod
 import Mathlib.Order.BooleanAlgebra
 import Mathlib.Order.Lattice
@@ -41,7 +43,7 @@ namespace UCQ_semiring_semantics
   variable {D : Type} [Fintype D]
   /- Semiring K -/
   variable {K : Type}
-  variable [K_SR : Semiring K]
+  variable [Semiring K]
 
   structure tuple where
     R : S.relSym
@@ -72,14 +74,18 @@ namespace UCQ_semiring_semantics
       intros a b c le1 le2
       let ⟨k1, E1⟩ := le1
       let ⟨k2, E2⟩ := le2
-      exists (k1 + k2); rw [<- K_SR.add_assoc, E1]; exact E2
+      exists (k1 + k2); rw [<- add_assoc, E1]; exact E2
 
-  instance : Preorder K where
+  instance instPreOrder : Preorder K where
     le := natural_order K
     le_refl := KIsPreorder.refl
     le_trans := KIsPreorder.trans
 
+  @[simp]
   def naturally_ordered := IsPartialOrder K (natural_order K)
+
+  instance instPartialOrder {nat_ord : @naturally_ordered K _} : PartialOrder K where
+    le_antisymm := by simp at nat_ord; exact nat_ord.antisymm
 
   def contained (qs1 : @UCQ S V1 outs) (qs2 : @UCQ S V2 outs) :=
     ∀ (I : Instance) (t : @Vect outs D),
@@ -117,9 +123,14 @@ instance : BoundedOrder Bool := by infer_instance
 open UCQ_semiring_semantics
 
 variable {outs : Nat}
+variable {K : Type} variable [Semiring K]
+variable {K1 : Type} variable [Semiring K1]
+variable {K2 : Type} variable [Semiring K2]
 variable {V : Type} [Fintype V]
+variable {V1 : Type} [Fintype V1]
+variable {V2 : Type} [Fintype V2]
 variable {D : Type} [Fintype D]
-variable {S : Schema} {D : Type}
+variable {S : Schema}
 variable (I : @UCQ_set_semantics.Instance S D)
 variable (dec : ∀ (R : S.relSym) (t : @Vect (S.arities R) D), Decidable (t ∈ I R))
 
@@ -203,7 +214,7 @@ lemma forall_top_impl_list_fold_top {α β : Type} [DistribLattice β] [OrderTop
 /-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if `t` is an element
 of the set semantics of UCQ of `qs` and `I`, then under the semiring semantics
 applied to Bool, `qs(I)(t)` has the value `true` -/
-lemma set_semantics_impl_bool_semiring_semantics [Fintype D] :
+lemma set_semantics_impl_bool_semiring_semantics :
   ∀ (qs : @UCQ S V outs) (t : @Vect outs D),
   t ∈ UCQ_set_semantics.set_semantics qs I →
   semiring_semantics qs (annotate_with_bool I dec) t = true := by
@@ -235,7 +246,7 @@ lemma set_semantics_impl_bool_semiring_semantics [Fintype D] :
 /-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if under the semiring
 semantics applied to Bool, `qs(I)(t)` has the value `true`, then `t` is an
 element of the set semantics of UCQ of `qs` and `I` -/
-lemma bool_semiring_semantics_impl_set_semantics [Fintype D] :
+lemma bool_semiring_semantics_impl_set_semantics :
   ∀ (qs : @UCQ S V outs) (t : @Vect outs D),
   semiring_semantics qs (annotate_with_bool I dec) t = true →
   t ∈ UCQ_set_semantics.set_semantics qs I := by
@@ -257,10 +268,36 @@ lemma bool_semiring_semantics_impl_set_semantics [Fintype D] :
 /-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, `qs(I)(t)` has the
 value `true` under the semiring semantics applied to Bool if and only if
 `t` is an element of the set semantics of UCQ of `qs` and `I` -/
-theorem set_semantics_iff_bool_semantics [Fintype D] :
+theorem set_semantics_iff_bool_semantics :
 ∀ (qs : @UCQ S V outs) (t : @Vect outs D),
   semiring_semantics qs (annotate_with_bool I dec) t = true ↔
   t ∈ UCQ_set_semantics.set_semantics qs I := by
   intros qs t; apply Iff.intro
   . apply bool_semiring_semantics_impl_set_semantics
   . apply set_semantics_impl_bool_semiring_semantics
+
+/-- `R1 ≤_K R2` the containment relation between two K-relations -/
+def KRel.le (R1 R2 : @Vect outs D -> K) :=
+  ∀ t : @Vect outs D, (R1 t) ≤ (R2 t)
+
+/-- `K` being naturally orderred induces a pointwise partial order on K-relations -/
+instance KRel.instPartialOrder {nat_ord : @naturally_ordered K _} :
+  PartialOrder (@Vect outs D -> K) where
+  le_antisymm := by
+    intros f g le_fg le_gf; simp at nat_ord
+    funext d; specialize le_fg d; specialize le_gf d; apply nat_ord.antisymm;
+    apply le_fg; apply le_gf
+
+/-- Q1 ⊑K Q2 -/
+def UCQ_semiring_contains (K : Type) [Semiring K] {_ : @naturally_ordered K _} (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs) :=
+  ∀ (I : @Instance S D K), (semiring_semantics Q1 I) ≤ (semiring_semantics Q2 I)
+notation:0 Q1:0 " ⊑ " K:0 " ; " Q2:0 => UCQ_semiring_contains K Q1 Q2
+
+/-- A map `f : K1 -> K2` applied to a K1-relation `R1` is a K2-relation -/
+def KRel.map (R1 : @Vect outs D -> K1) (f : K1 -> K2) : @Vect outs D -> K2 :=
+  fun t => f (R1 t)
+
+/-- `K1⇒K2` means that for any UCQ's and instances, containment wrt `K1`
+determines containment wrt `K2` -/
+def K_determines {_ : @naturally_ordered K1 _} := ∀ (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs),
+  (Q1 ⊑K1; Q2)
