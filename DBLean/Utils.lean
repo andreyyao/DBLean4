@@ -44,26 +44,25 @@ lemma Vect.comp_map {n : Nat} {A B C : Type} (f : A -> B) (g : B -> C) (v : @Vec
 lemma Vect.map_id {A : Type} : ∀ (v : @Vect n A), Vect.map id v = v := by
   intro v; unfold Vect.map; simp_rw [List.map_id]
 
-/-- A vector of any elements from a finite type is itself finite -/
-theorem Vect.finite_finite {A : Type} : Finite A -> Finite (@Vect n A) := by
-  intro H
-  induction n with
-  | zero =>
-    let toFun := fun (v : @Vect 0 A) => { val := 0, isLt := Nat.zero_lt_one : Fin 1}
-    let invFun := fun (m : Fin 1) => @Vect.empty A
-    have left_inverse : Function.LeftInverse invFun toFun := by
-      unfold Function.LeftInverse; intro v
-      rw [empty_unique (invFun (toFun v)), empty_unique v]
-    have right_inverse : Function.RightInverse invFun toFun := by
-      unfold Function.RightInverse
-      intro fin; cases fin with
-      | mk m lt => apply ((@Nat.lt_one_iff m).1) at lt; subst m; rfl
-    have equiv := Equiv.mk toFun invFun left_inverse right_inverse
-    exact (Finite.intro equiv)
-  | succ n' IH => cases IH with | @intro b IHEq => cases H with | @intro c Eq =>
-    let N := b * c
-    let toFun := fun (v : @Vect n A) => 0
-    sorry
+-- theorem Vect.finite_finite {A : Type} : Finite A -> Finite (@Vect n A) := by
+--   intro H
+--   induction n with
+--   | zero =>
+--     let toFun := fun (v : @Vect 0 A) => { val := 0, isLt := Nat.zero_lt_one : Fin 1}
+--     let invFun := fun (m : Fin 1) => @Vect.empty A
+--     have left_inverse : Function.LeftInverse invFun toFun := by
+--       unfold Function.LeftInverse; intro v
+--       rw [empty_unique (invFun (toFun v)), empty_unique v]
+--     have right_inverse : Function.RightInverse invFun toFun := by
+--       unfold Function.RightInverse
+--       intro fin; cases fin with
+--       | mk m lt => apply ((@Nat.lt_one_iff m).1) at lt; subst m; rfl
+--     have equiv := Equiv.mk toFun invFun left_inverse right_inverse
+--     exact (Finite.intro equiv)
+--   | succ n' IH => cases IH with | @intro b IHEq => cases H with | @intro c Eq =>
+--     let N := b * c
+--     let toFun := fun (v : @Vect n A) => 0
+--     sorry
 
 /-- A function between two finite types is finite itself -/
 lemma fun_finite {A B : Type} : Finite A -> Finite B -> Finite (A -> B) :=

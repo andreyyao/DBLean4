@@ -31,11 +31,10 @@ namespace CQ_syntax
   def Atom.map (f : V1 -> V2) (A : Atom S V1) : Atom S V2 :=
   { R := A.R, vars := Vect.map f A.vars }
 
-  class homomorphism {V1 V2 : Type} (q1 : CQ V1 outs) (q2 : CQ V2 outs) where
-    f : V1 -> V2
+  structure homomorphism {V1 V2 : Type} (q1 : @CQ S V1 outs) (q2 : @CQ S V2 outs) (h : V1 -> V2) : Prop where
     -- body_cond : ∀ A ∈ q1.body, q2.body.Mem (Atom.map f A)
-    body_cond : List.Forall (fun (A : Atom S V1) => q2.body.Mem (Atom.map f A)) q1.body
-    head_cond : q2.head = Vect.map f q1.head
+    body_cond : ∀ A ∈ q1.body, (Atom.map h A) ∈ q2.body
+    head_cond : q2.head = Vect.map h q1.head
 
 end CQ_syntax
 
@@ -72,8 +71,7 @@ lemma helper {R1 R2 : S.relSym} {A : Type} (eq : R1 = R2) : @Vect (S.arities R1)
 /-- The canonical database `D[q]` of a query `[q]` -/
 def canonical_DB (q : @CQ S V outs) : @Instance S V :=
   fun (R : S.relSym) =>
-  { t : @Vect (S.arities R) V |
-    ∃ A ∈ q.body, ∃ (eq : A.R = R), t = cast (helper eq) A.vars }
+  { t : @Vect (S.arities R) V | { R := R , vars := t } ∈ q.body }
 
 /-- The head of a query `q` is an element of `q(D[q])`-/
 lemma head_in_canon_db_eval : ∀ (q : @CQ S V outs), q.head ∈ semantics q (canonical_DB q) := by
@@ -84,55 +82,52 @@ lemma head_in_canon_db_eval : ∀ (q : @CQ S V outs), q.head ∈ semantics q (ca
   apply And.intro
   . rw [Vect.map_id]
   . intro A mem; rw [Vect.map_id, Set.mem_setOf_eq]
-    exists A; aesop
+    exact mem
 
 variable (D : Type)
 variable (q1 : @CQ S V1 outs)
 variable (q2 : @CQ S V2 outs)
 
-lemma homomorphism_1_3 :  contained V1 q1 q2 -> q1.head ∈ semantics q2 (canonical_DB q1)  := by
+lemma homomorphism_1_3 : contained V1 q1 q2 → q1.head ∈ semantics q2 (canonical_DB q1)  := by
   intro hypothesis
   unfold contained at hypothesis
   specialize hypothesis (canonical_DB q1)
   have h_head_q1 : q1.head ∈ semantics q1 (canonical_DB q1) := head_in_canon_db_eval q1
   exact hypothesis h_head_q1
 
-lemma homomorphism_2_1 [h : homomorphism q2 q1] : contained D q1 q2 := by
-  unfold contained; intro I; rw [subset_def]; intros t mem
+lemma homomorphism_2_1 : (∃ h, homomorphism q2 q1 h) → contained D q1 q2 := by
+  unfold contained; intros H I; rw [subset_def]; intros t mem
+  obtain ⟨h, hom⟩ := H
   rw [semantics, Set.mem_setOf_eq] at mem
   rw [semantics, Set.mem_setOf_eq]
-  let ⟨ν1, ⟨Eq, BodEq⟩⟩ := mem
-  exists (ν1 ∘ h.f)
+  obtain ⟨ν1, ⟨Eq, BodEq⟩⟩ := mem
+  exists (ν1 ∘ h)
   apply And.intro
-  . rw [Eq, h.head_cond, Vect.comp_map]
+  . rw [Eq, hom.head_cond, Vect.comp_map]
   . intros A2 mem2
-    have mem1 := List.forall_iff_forall_mem.1 h.body_cond A2 mem2
+    have mem1 := hom.body_cond A2 mem2
     rw [<- Vect.comp_map]
-    exact BodEq (Atom.map (homomorphism.f q2 q1) A2) mem1
+    exact BodEq (Atom.map h A2) mem1
 
-lemma homomorphism_3_2 :  q1.head ∈ semantics q2 (canonical_DB q1) -> ∃ h : homomorphism q2 q1, True := by
+lemma homomorphism_3_2 : q1.head ∈ semantics q2 (canonical_DB q1) -> ∃ h, homomorphism q2 q1 h := by
   intro hypothesis
   rw [semantics, Set.mem_setOf_eq] at hypothesis
-  obtain ⟨v, ⟨head_eq, body_cond⟩⟩ := hypothesis
-  let f := v
-
-  have head_cond : q1.head = Vect.map f q2.head:= by {
-    rw [head_eq]
-  }
-
-  have body_cond_hom : List.Forall (fun (A : Atom S V2) => q1.body.Mem (Atom.map f A)) q2.body:= by {
+  obtain ⟨f, ⟨head_cond, body_cond⟩⟩ := hypothesis
+  have body_cond_hom : ∀ A ∈ q2.body, Atom.map f A ∈ q1.body := by {
     unfold canonical_DB at body_cond
-    induction' eq : q2.body
-    case nil => simp
-    case cons hd tl IH =>
-      simp; apply And.intro
-      . have hd_mem : hd ∈ q2.body := by aesop
-        specialize body_cond hd hd_mem
-        unfold Atom.map
-        rw [Set.mem_setOf_eq] at body_cond
-        rcases body_cond with ⟨A, ⟨A_mem, ⟨R_eq, Eqq⟩⟩⟩
-        sorry
-
+    unfold Atom.map
+    intros A A_mem
+    aesop
   }
-  -- Construct the homomorphism instance and conclude the proof
-  sorry
+  exists f; exact { head_cond := head_cond, body_cond := body_cond_hom }
+
+theorem homomorpshim_theorem :
+  (q1.head ∈ semantics q2 (canonical_DB q1) ↔ contained V1 q1 q2) ∧
+  (contained V1 q1 q2 ↔ ∃ h, homomorphism q2 q1 h) := by
+  apply And.intro;
+  . apply Iff.intro
+    . intro H; apply homomorphism_2_1; apply homomorphism_3_2; apply H
+    . apply homomorphism_1_3
+  . apply Iff.intro
+    . intro H; apply homomorphism_3_2; apply homomorphism_1_3; apply H
+    . intro H; apply homomorphism_2_1; exact H

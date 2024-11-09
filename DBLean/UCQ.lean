@@ -297,7 +297,7 @@ notation:0 Q1:0 " ⊑ " K:0 " ; " Q2:0 => UCQ_semiring_contains K Q1 Q2
 def KRel.map (R1 : @Vect outs D -> K1) (f : K1 -> K2) : @Vect outs D -> K2 :=
   fun t => f (R1 t)
 
-/-- `K1⇒K2` means that for any UCQ's and instances, containment wrt `K1`
-determines containment wrt `K2` -/
-def K_determines {_ : @naturally_ordered K1 _} := ∀ (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs),
-  (Q1 ⊑K1; Q2)
+-- /-- `K1⇒K2` means that for any UCQ's and instances, containment wrt `K1`
+-- determines containment wrt `K2` -/
+-- def K_determines {_ : @naturally_ordered K1 _} := ∀ (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs),
+--   (Q1 ⊑K1; Q2)
