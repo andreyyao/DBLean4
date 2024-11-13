@@ -61,31 +61,30 @@ namespace UCQ_semiring_semantics
     valuations'.sum (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S V) => acc * (I A.R (Vect.map v A.vars))) 1 q.body)
 
   noncomputable
-  def semiring_semantics (qs : @UCQ S V outs) (I : @Instance S D K) (t : @Vect outs D) : K :=
+  def semiring_semantics (qs : @UCQ S V outs) (I : @Instance S D K) :=
+   fun (t : @Vect outs D) =>
     List.foldl (fun acc q => acc + (CQ_semiring_semantics q I t)) 0 qs
 
-  @[simp]
   def natural_order (K : Type) [Semiring K] : K -> K -> Prop :=
     fun (a b : K) => ∃ (c : K), a + c = b
 
-  instance KIsPreorder : IsPreorder K (natural_order K) where
-    refl := by intro a; exists 0; simp
-    trans := by
+  @[default_instance]
+  instance instPreOrder {K : Type} [Semiring K] : Preorder K where
+    le := natural_order K
+    le_refl := by intro a; exists 0; simp
+    le_trans := by
       intros a b c le1 le2
       let ⟨k1, E1⟩ := le1
       let ⟨k2, E2⟩ := le2
       exists (k1 + k2); rw [<- add_assoc, E1]; exact E2
 
-  instance instPreOrder : Preorder K where
-    le := natural_order K
-    le_refl := KIsPreorder.refl
-    le_trans := KIsPreorder.trans
+  class NatOrdSemiring (K : Type) extends Semiring K where
+    naturally_ordered : IsPartialOrder K (natural_order K)
 
-  @[simp]
-  def naturally_ordered := IsPartialOrder K (natural_order K)
-
-  instance instPartialOrder {nat_ord : @naturally_ordered K _} : PartialOrder K where
-    le_antisymm := by simp at nat_ord; exact nat_ord.antisymm
+  instance instPartialOrder (K : Type) [no : NatOrdSemiring K] : PartialOrder K where
+    le_antisymm := by
+      intros a b le_ab le_ba
+      exact (no.naturally_ordered.antisymm a b le_ab le_ba)
 
   def contained (qs1 : @UCQ S V1 outs) (qs2 : @UCQ S V2 outs) :=
     ∀ (I : Instance) (t : @Vect outs D),
@@ -276,28 +275,35 @@ theorem set_semantics_iff_bool_semantics :
   . apply bool_semiring_semantics_impl_set_semantics
   . apply set_semantics_impl_bool_semiring_semantics
 
-/-- `R1 ≤_K R2` the containment relation between two K-relations -/
-def KRel.le (R1 R2 : @Vect outs D -> K) :=
+/-- `R1 ≤K; R2` the containment relation between two K-relations -/
+def KRel.contained [NatOrdSemiring K] (R1 R2 : @Vect outs D -> K) :=
   ∀ t : @Vect outs D, (R1 t) ≤ (R2 t)
 
-/-- `K` being naturally orderred induces a pointwise partial order on K-relations -/
-instance KRel.instPartialOrder {nat_ord : @naturally_ordered K _} :
-  PartialOrder (@Vect outs D -> K) where
-  le_antisymm := by
-    intros f g le_fg le_gf; simp at nat_ord
-    funext d; specialize le_fg d; specialize le_gf d; apply nat_ord.antisymm;
-    apply le_fg; apply le_gf
-
-/-- Q1 ⊑K Q2 -/
-def UCQ_semiring_contains (K : Type) [Semiring K] {_ : @naturally_ordered K _} (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs) :=
-  ∀ (I : @Instance S D K), (semiring_semantics Q1 I) ≤ (semiring_semantics Q2 I)
-notation:0 Q1:0 " ⊑ " K:0 " ; " Q2:0 => UCQ_semiring_contains K Q1 Q2
+/-- `Q1 ⊑K; Q2` is containment of queries wrt semiring K -/
+@[simp]
+def UCQ_semiring_contains (K : Type) [NatOrdSemiring K] (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs) :=
+  ∀ (I : @Instance S D K), (KRel.contained (semiring_semantics Q1 I) (semiring_semantics Q2 I))
 
 /-- A map `f : K1 -> K2` applied to a K1-relation `R1` is a K2-relation -/
 def KRel.map (R1 : @Vect outs D -> K1) (f : K1 -> K2) : @Vect outs D -> K2 :=
   fun t => f (R1 t)
 
--- /-- `K1⇒K2` means that for any UCQ's and instances, containment wrt `K1`
--- determines containment wrt `K2` -/
--- def K_determines {_ : @naturally_ordered K1 _} := ∀ (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs),
---   (Q1 ⊑K1; Q2)
+/-- `K1⇒K2` means that for any UCQ's and instances, containment wrt `K1`
+determines containment wrt `K2` -/
+def K_determines (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2] :=
+  ∀ (Q1 : @UCQ S V1 outs) (Q2 : @UCQ S V2 outs),
+  @UCQ_semiring_contains _ _ _ _ _ D _ _ K1 _ Q1 Q2 →
+  @UCQ_semiring_contains _ _ _ _ _ D _ _ K2 _ Q1 Q2
+
+-- /-- Prop. A.2 from "Containment of conjunctive queries on annotated relations" -/
+-- lemma homomorphism_monotone (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
+--   (hom : RingHom K1 K2) : Monotone hom.toFun := by
+
+
+-- /-- Lemma 6.2 from "Containment of conjunctive queries on annotated relations" -/
+-- lemma epimorphism_imp_determines {D : Type} [Fintype D] (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
+--  (hom : RingHom K1 K2) (surj : Function.Surjective hom.toFun)
+--  : @K_determines outs V1 _ V2 _ D _ S K1 K2 _ _ := by
+--  unfold K_determines UCQ_semiring_contains KRel.contained;
+--  intros Q1 Q2 query_contains; intros I t
+--  have J : @Instance S D K2 := fun t =>
