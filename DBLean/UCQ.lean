@@ -55,9 +55,9 @@ namespace UCQ_semiring_semantics
 
   noncomputable
   def CQ_semiring_semantics (q : @CQ S V outs) (I : @Instance S D K) (t : @Vect outs D) : K :=
-    let valuations := { v : V -> D | Vect.map v q.head = t }/-Why more than 1? -/
+    let valuations := { v : V -> D | Vect.map v q.head = t }
     let valuations' := Set.Finite.toFinset (finite_impl_finite_set valuations)
-    valuations'.sum (fun v : V -> D => List.foldl (fun (acc : K) (A : Atom S V) => acc * (I A.R (Vect.map v A.vars))) 1 q.body)
+    ∑ v ∈ valuations', List.foldl (fun (acc : K) (A : Atom S V) => acc * (I A.R (Vect.map v A.vars))) 1 q.body
 
   noncomputable
   def semiring_semantics (qs : @UCQ S V outs) (I : @Instance S D K) :=
@@ -284,8 +284,13 @@ def UCQ_semiring_contains (K : Type) [NatOrdSemiring K] (Q1 : @UCQ S V1 outs) (Q
   ∀ (I : @Instance S D K), (KRel.contained (semiring_semantics Q1 I) (semiring_semantics Q2 I))
 
 /-- A map `f : K1 -> K2` applied to a K1-relation `R1` is a K2-relation -/
-def KRel.map (R1 : @Vect outs D -> K1) (f : K1 -> K2) : @Vect outs D -> K2 :=
+@[simp]
+def KRel.map (f : K1 -> K2) (R1 : @Vect outs D -> K1) : @Vect outs D -> K2 :=
   fun t => f (R1 t)
+
+@[simp]
+def Instance.map (f : K1 -> K2) (I : @Instance S D K1) : @Instance S D K2 :=
+  fun R (t : @Vect (S.arities R) D) => f (I R t)
 
 /-- `K1⇒K2` means that for any UCQ's and instances, containment wrt `K1`
 determines containment wrt `K2` -/
@@ -302,21 +307,40 @@ lemma homomorphism_monotone (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K
   (hom : RingHom K1 K2) : Monotone hom.toFun := by
   intros a b le; obtain ⟨c, eq⟩ := le; exists (hom c); aesop
 
-/-- Prop. A.2 from "Containment of conjunctive queries on annotated relations" -/
-lemma epimorphism_orderreflect (K1 K2 : Type) [no1 : NatOrdSemiring K1] [no2 : NatOrdSemiring K2]
-  (hom : RingHom K1 K2) {surj : Function.Surjective hom} :
-  ∀ a b : K1, hom a ≤ hom b → a ≤ b := by
-  intros a b le2
-  -- apply le_is_natural_order.mp at le2; apply le_is_natural_order.mpr
-  -- unfold natural_order at *
-  obtain ⟨c2, eq⟩ := le2; obtain ⟨c, eq'⟩ := surj c2
-  subst eq'; rw [<- map_add] at eq
-  exists c; sorry
+lemma homomorphism_KRel_map_commute {n : ℕ} {D : Type} {KR : @Vect n D -> K1} {hom : RingHom K1 K2} (t : @Vect n D) :
+  KRel.map hom KR t = hom (KR t) := by rfl
 
--- /-- Lemma 6.2 from "Containment of conjunctive queries on annotated relations" -/
--- lemma epimorphism_imp_determines {D : Type} [Fintype D] (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
---  (hom : RingHom K1 K2) (surj : Function.Surjective hom.toFun)
---  : @K_determines outs V1 _ V2 _ D _ S K1 K2 _ _ := by
---  unfold K_determines UCQ_semiring_contains KRel.contained;
---  intros Q1 Q2 query_contains; intros I t
---  have J : @Instance S D K2 := fun t =>
+lemma homomorphism_semantics_commute_CQ {q : @CQ S V outs} {I : @Instance S D K1} {hom : RingHom K1 K2} :
+  CQ_semiring_semantics q (Instance.map hom I) = KRel.map hom (CQ_semiring_semantics q I) := by
+  unfold CQ_semiring_semantics KRel.map; simp; funext
+  induction q.body with
+  | nil => simp
+  | cons hd tl _ =>
+    simp; rw [Finset.sum_congr]; simp; intros _ _; rw [List.foldl_hom]
+    intros k A; aesop
+
+lemma homomorphism_semantics_commute {Q : @UCQ S V outs} {I : @Instance S D K1} {hom : RingHom K1 K2} :
+  semiring_semantics Q (Instance.map hom I) = KRel.map hom (semiring_semantics Q I) := by
+  unfold semiring_semantics KRel.map; simp; funext t
+  induction Q with
+  | nil => simp
+  | cons hd tl _ =>
+    simp; rw [homomorphism_semantics_commute_CQ]; simp; rw [List.foldl_hom]
+    intros k A; rw [map_add]
+    rw [<- homomorphism_KRel_map_commute, homomorphism_semantics_commute_CQ]
+
+/-- Lemma 6.2 from "Containment of conjunctive queries on annotated relations" -/
+lemma epimorphism_imp_determines {D : Type} [Fintype D] (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
+  (hom : RingHom K1 K2) (surj : Function.Surjective hom)
+  : @K_determines outs V1 _ V2 _ D _ S K1 K2 _ _ := by
+  unfold K_determines UCQ_semiring_contains KRel.contained;
+  intros Q1 Q2 query_contains; intros J t
+  let I : @Instance S D K1 :=
+    fun R (t : @Vect (S.arities R) D) => Function.surjInv surj (J R t)
+  have map_I_J : J = Instance.map hom I := by
+    unfold Instance.map; funext R t; unfold I; rw [Function.surjInv_eq surj]
+  specialize query_contains I t
+  rw [map_I_J]
+  rw [homomorphism_semantics_commute, homomorphism_KRel_map_commute]
+  rw [homomorphism_semantics_commute, homomorphism_KRel_map_commute]
+  apply homomorphism_monotone; exact query_contains
