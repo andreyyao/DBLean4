@@ -3,7 +3,6 @@ import DBLean.Utils
 import Mathlib.Order.Defs
 import Mathlib.Algebra.Polynomial.Basic
 import Mathlib.Algebra.Ring.Defs
-import Mathlib.Algebra.Ring.Nat
 import Mathlib.Algebra.BigOperators.Finprod
 import Mathlib.Order.BooleanAlgebra
 import Mathlib.Order.Lattice
@@ -295,10 +294,24 @@ def K_determines (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2] :=
   @UCQ_semiring_contains _ _ _ _ _ D _ _ K1 _ Q1 Q2 →
   @UCQ_semiring_contains _ _ _ _ _ D _ _ K2 _ Q1 Q2
 
--- /-- Prop. A.2 from "Containment of conjunctive queries on annotated relations" -/
--- lemma homomorphism_monotone (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
---   (hom : RingHom K1 K2) : Monotone hom.toFun := by
+-- lemma le_is_natural_order {K : Type} [NatOrdSemiring K] {a b : K} :
+--   a ≤ b ↔ natural_order K a b := by apply Iff.intro <;> tauto
 
+/-- Prop. A.2 from "Containment of conjunctive queries on annotated relations" -/
+lemma homomorphism_monotone (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
+  (hom : RingHom K1 K2) : Monotone hom.toFun := by
+  intros a b le; obtain ⟨c, eq⟩ := le; exists (hom c); aesop
+
+/-- Prop. A.2 from "Containment of conjunctive queries on annotated relations" -/
+lemma epimorphism_orderreflect (K1 K2 : Type) [no1 : NatOrdSemiring K1] [no2 : NatOrdSemiring K2]
+  (hom : RingHom K1 K2) {surj : Function.Surjective hom} :
+  ∀ a b : K1, hom a ≤ hom b → a ≤ b := by
+  intros a b le2
+  -- apply le_is_natural_order.mp at le2; apply le_is_natural_order.mpr
+  -- unfold natural_order at *
+  obtain ⟨c2, eq⟩ := le2; obtain ⟨c, eq'⟩ := surj c2
+  subst eq'; rw [<- map_add] at eq
+  exists c; sorry
 
 -- /-- Lemma 6.2 from "Containment of conjunctive queries on annotated relations" -/
 -- lemma epimorphism_imp_determines {D : Type} [Fintype D] (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
