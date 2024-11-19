@@ -1,11 +1,11 @@
-import DBLean.CQ
-import DBLean.Utils
 import Mathlib.Order.Defs
-import Mathlib.Algebra.Polynomial.Basic
-import Mathlib.Algebra.Ring.Defs
 import Mathlib.Algebra.BigOperators.Finprod
 import Mathlib.Order.BooleanAlgebra
 import Mathlib.Order.Lattice
+import DBLean.CQ
+import DBLean.Utils
+import DBLean.Semirings
+import DBLean.Lattices
 
 variable {S : Schema}
 /- The output arity -/
@@ -64,59 +64,11 @@ namespace UCQ_semiring_semantics
    fun (t : @Vect outs D) =>
     List.foldl (fun acc q => acc + (CQ_semiring_semantics q I t)) 0 qs
 
-  def natural_order (K : Type) [Semiring K] : K -> K -> Prop :=
-    fun (a b : K) => ∃ (c : K), a + c = b
-
-  @[default_instance]
-  instance instPreOrder {K : Type} [Semiring K] : Preorder K where
-    le := natural_order K
-    le_refl := by intro a; exists 0; simp
-    le_trans := by
-      intros a b c le1 le2
-      let ⟨k1, E1⟩ := le1
-      let ⟨k2, E2⟩ := le2
-      exists (k1 + k2); rw [<- add_assoc, E1]; exact E2
-
-  class NatOrdSemiring (K : Type) extends Semiring K where
-    naturally_ordered : IsPartialOrder K (natural_order K)
-
-  instance instPartialOrder (K : Type) [no : NatOrdSemiring K] : PartialOrder K where
-    le_antisymm := by
-      intros a b le_ab le_ba
-      exact (no.naturally_ordered.antisymm a b le_ab le_ba)
-
   def contained (qs1 : @UCQ S V1 outs) (qs2 : @UCQ S V2 outs) :=
     ∀ (I : Instance) (t : @Vect outs D),
     (natural_order K) (semiring_semantics qs1 I t) (semiring_semantics qs2 I t)
 
 end UCQ_semiring_semantics
-
-@[simp]
-def Bool.nsmul : Nat -> Bool -> Bool
-| .zero => fun _ => false
-| .succ n => fun b => b || (Bool.nsmul n b)
-
-instance : Semiring Bool where
-  add := or
-  add_assoc := by intros; exact Bool.or_assoc _ _ _
-  zero := false
-  zero_add := by intros; exact Bool.false_or _
-  add_zero := by intros; exact Bool.or_false _
-  add_comm := by intros; exact Bool.or_comm _ _
-  mul := and
-  mul_assoc := by intros; exact Bool.and_assoc _ _ _
-  one := true
-  one_mul := by intros; exact Bool.true_and _
-  mul_one := by intros; exact Bool.and_true _
-  left_distrib := by intros; exact Bool.and_or_distrib_left _ _ _
-  right_distrib := by intros; exact Bool.and_or_distrib_right _ _ _
-  zero_mul := by intros; exact Bool.false_and _
-  mul_zero := by intros; exact Bool.and_false _
-  nsmul := Bool.nsmul
-  nsmul_zero := by intro b; rfl
-  nsmul_succ := by intros n b; simp; rw [Bool.or_comm]; rfl
-
-instance : BoundedOrder Bool := by infer_instance
 
 open UCQ_semiring_semantics
 
@@ -138,76 +90,6 @@ variable (dec : ∀ (R : S.relSym) (t : @Vect (S.arities R) D), Decidable (t ∈
 def annotate_with_bool : @Instance S D Bool :=
   fun (R : S.relSym) (t : @Vect (S.arities R) D) => t ∈ I R
 
-lemma entry_true_impl_bool_summation_true {D : Type}: ∀ (S : Finset D) (f : D -> Bool),
-  (∃ s ∈ S, f s = true) → (S.sum f = true) := by
-  intros S f ex
-  apply Finset.sup_eq_top_iff.mpr at ex
-  exact ex
-
-lemma bool_summation_true_impl_entry_true {D : Type}: ∀ (S : Finset D) (f : D -> Bool),
-  (S.sum f = true) → (∃ s ∈ S, f s = true) := by
-  intros S f eq;
-  rw [Finset.sum_eq_fold] at eq
-  exact Finset.sup_eq_top_iff.mp eq /-Huh, nice find-/
-
-lemma list_fold_lattice_top {α β : Type} [DistribLattice α] [OrderTop α] :
-  ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊔ f e) ⊤ l = ⊤ := by
-  intros f l
-  induction l with
-  | nil => rfl
-  | cons hd tl IH => simp; exact IH
-
-lemma list_fold_lattice_bot {α β : Type} [DistribLattice α] [OrderBot α] :
-  ∀ (f : β -> α) (l : List β), List.foldl (fun acc e => acc ⊓ f e) ⊥ l = ⊥ := by
-  intros f l
-  induction l with
-  | nil => rfl
-  | cons hd tl IH => simp; exact IH
-
-lemma list_fold_true_impl_exists_true {β : Type} : ∀ (f : β -> Bool) (l : List β),
-  List.foldl (fun acc e => acc + f e) 0 l = 1 →
-  ∃ e ∈ l, f e = 1 := by
-  intros f l eq; induction l with
-  | nil => contradiction
-  | cons hd tl IHtl => simp; cases val : (f hd) with
-    | true => aesop
-    | false => right; aesop
-
-lemma list_fold_init_lt_top_impl_lt_top {α β : Type} [DistribLattice β] [OrderTop β] :
-  ∀ (f : α -> β) (l : List α) (i : β), i < ⊤ →
-  List.foldl (fun acc e => acc ⊓ f e) i l < ⊤ := by
-  intros f l i lt; induction l with
-  | nil => simp; exact lt
-  | cons hd tl IH =>
-    rw [<- List.foldl_map] at *; simp; rw [inf_comm, List.foldl_assoc] at *
-    generalize List.foldl Inf.inf i (List.map f tl) = x at *
-    have _ : f hd ⊓ x ≤ x := by apply inf_le_right
-    have _ : x ≤ ⊤ := (le_of_lt IH)
-    apply lt_of_le_of_ne
-    . aesop
-    . aesop
-
-lemma list_fold_top_impl_forall_top {α β : Type} [DistribLattice β] [OrderTop β] [Dec: DecidableEq β]:
-  ∀ (f : α -> β) (l : List α),
-  List.foldl (fun acc e => acc ⊓ f e) ⊤ l = ⊤ →
-  (∀ e ∈ l, f e = ⊤) := by
-  intros f l eq; induction l with
-  | nil => simp
-  | cons hd tl IHtl => simp; simp at eq; cases (Dec (f hd) ⊤) with
-    | isTrue h => aesop
-    | isFalse h =>
-      apply lt_top_iff_ne_top.mpr at h
-      have fold_lt := list_fold_init_lt_top_impl_lt_top f tl (f hd) h
-      aesop
-
-lemma forall_top_impl_list_fold_top {α β : Type} [DistribLattice β] [OrderTop β] :
-  ∀ (f : α -> β) (l : List α),
-  (∀ e ∈ l, f e = ⊤) →
-  List.foldl (fun acc e => acc ⊓ f e) ⊤ l = ⊤ := by
-  intros f l H; induction l with
-  | nil => rfl
-  | cons hd tl IHtl =>
-    simp; simp at H; rcases H with ⟨eq, alltl⟩; rw [eq]; apply IHtl alltl
 
 /-- For any boolean UCQ `qs`, instance `I`, and tuple `t`, if `t` is an element
 of the set semantics of UCQ of `qs` and `I`, then under the semiring semantics
@@ -250,7 +132,7 @@ lemma bool_semiring_semantics_impl_set_semantics :
   t ∈ UCQ_set_semantics.set_semantics qs I := by
   intros qs t eq
   unfold semiring_semantics CQ_semiring_semantics at eq
-  apply list_fold_true_impl_exists_true at eq
+  apply list_fold_true_impl_exists_top at eq
   rcases eq with ⟨q, ⟨q_mem, isT⟩⟩; simp at isT
   apply bool_summation_true_impl_entry_true at isT; simp at isT
   rcases isT with ⟨v, ⟨head_cond, body_cond⟩⟩
@@ -299,14 +181,6 @@ def K_determines (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2] :=
   @UCQ_semiring_contains _ _ _ _ _ D _ _ K1 _ Q1 Q2 →
   @UCQ_semiring_contains _ _ _ _ _ D _ _ K2 _ Q1 Q2
 
--- lemma le_is_natural_order {K : Type} [NatOrdSemiring K] {a b : K} :
---   a ≤ b ↔ natural_order K a b := by apply Iff.intro <;> tauto
-
-/-- Prop. A.2 from "Containment of conjunctive queries on annotated relations" -/
-lemma homomorphism_monotone (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
-  (hom : RingHom K1 K2) : Monotone hom.toFun := by
-  intros a b le; obtain ⟨c, eq⟩ := le; exists (hom c); aesop
-
 lemma homomorphism_KRel_map_commute {n : ℕ} {D : Type} {KR : @Vect n D -> K1} {hom : RingHom K1 K2} (t : @Vect n D) :
   KRel.map hom KR t = hom (KR t) := by rfl
 
@@ -319,6 +193,7 @@ lemma homomorphism_semantics_commute_CQ {q : @CQ S V outs} {I : @Instance S D K1
     simp; rw [Finset.sum_congr]; simp; intros _ _; rw [List.foldl_hom]
     intros k A; aesop
 
+/-- Prop 6.1 from "Containment of conjunctive queries on annotated relations" -/
 lemma homomorphism_semantics_commute {Q : @UCQ S V outs} {I : @Instance S D K1} {hom : RingHom K1 K2} :
   semiring_semantics Q (Instance.map hom I) = KRel.map hom (semiring_semantics Q I) := by
   unfold semiring_semantics KRel.map; simp; funext t
