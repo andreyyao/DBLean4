@@ -8,7 +8,6 @@ import DBLean.Semirings
 import DBLean.Lattices
 
 variable {S : Schema}
-/- The output arity -/
 variable {V : Type}
 variable {outs : Nat}
 
