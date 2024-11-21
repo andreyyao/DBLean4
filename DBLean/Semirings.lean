@@ -52,8 +52,8 @@ class NoZeroSubtractors (M₀ : Type u_2) [Add M₀] [Zero M₀] : Prop where
   eq_zero_or_eq_zero_of_add_eq_zero : ∀ {a b : M₀}, a + b = 0 → a = 0 ∨ b = 0
 
 /-- The type of positive semirings -/
-class Positive (K : Type) [Semiring K] extends NoZeroDivisors K, NoZeroSubtractors K : Prop where
-  zero_ne_one : (0 : K) ≠ (1 : K)
+class PosSemiring (K : Type) [Semiring K] extends NoZeroDivisors K, NoZeroSubtractors K : Prop where
+  zero_ne_one : (1 : K) ≠ (0 : K)
 
 /-- Prop. A.2 from "Containment of conjunctive queries on annotated relations" -/
 lemma homomorphism_monotone (K1 K2 : Type) [NatOrdSemiring K1] [NatOrdSemiring K2]
@@ -96,8 +96,8 @@ instance Bool.instIsPartialOrderNatOrd : IsPartialOrder Bool (natural_order Bool
 instance Bool.instNatOrdSemiring : NatOrdSemiring Bool where
   naturally_ordered := Bool.instIsPartialOrderNatOrd
 
-/- Bool is a posirive semiring -/
-instance Bool.instPosSemiring : Positive Bool where
+/- Bool is a positive semiring -/
+instance Bool.instPosSemiring : PosSemiring Bool where
   eq_zero_or_eq_zero_of_add_eq_zero := by
     rintro a b eq; cases a <;> cases b <;> try contradiction
     left; rfl
@@ -114,7 +114,7 @@ instance Nat.instNatOrdSemiring : NatOrdSemiring ℕ where
   naturally_ordered := Nat.instIsPartialOrderNatOrd
 
 /- ℕ is a positive semiring -/
-instance Nat.instPosSemiring : Positive ℕ where
+instance Nat.instPosSemiring : PosSemiring ℕ where
   eq_zero_or_eq_zero_of_add_eq_zero := by
     rintro a b eq; apply add_eq_zero.mp at eq; aesop
   eq_zero_or_eq_zero_of_mul_eq_zero := by
@@ -211,16 +211,16 @@ section provenance
       rw [add_eq_zero] at this; aesop
 
   /-- Multivariate polynomials over a positive semiring is again a positive semring -/
-  noncomputable instance {K : Type} [CommSemiring K] [pos : Positive K] :
-    Positive (MvPolynomial X K) where
+  noncomputable instance {K : Type} [CommSemiring K] [pos : PosSemiring K] :
+    PosSemiring (MvPolynomial X K) where
     zero_ne_one := by
       rintro triv
       let p0 := MvPolynomial.eval (λ _ => 0) (0 : MvPolynomial X K)
       let p1 := MvPolynomial.eval (λ _ => 0) (1 : MvPolynomial X K)
       have p0_eq_0 : p0 = 0 := by unfold p0; rw [<- MvPolynomial.C_0, MvPolynomial.eval_C]
       have p1_eq_1 : p1 = 1 := by unfold p1; rw [<- MvPolynomial.C_1, MvPolynomial.eval_C]
-      unfold p0 p1 at *; rw [triv] at p0_eq_0; rw [p0_eq_0] at p1_eq_1
-      exact (pos.zero_ne_one p1_eq_1)
+      unfold p0 p1 at *; rw [triv] at p1_eq_1; rw [p1_eq_1] at p0_eq_0
+      exact (pos.zero_ne_one p0_eq_0)
 
   /-- ℕ[X]. A provenance polynomial is a countably multivariate polynomial with
   coefficients from the natural numbers -/
@@ -237,20 +237,59 @@ section provenance
 
 end provenance
 
-/-- All positive semirings have a unique homomorphism onto Bool.
-In other words, Bool is the terminal object in the category of positive semirings -/
-def positive_imp_surj_Bool {K : Type} [Semiring K] [pos : Positive K] [dec : DecidableEq K] : K →+* Bool := by
-  let f (k : K) : Bool := decide (0 ≠ k)
+/-- All positive semirings have a homomorphism onto Bool -/
+def positive_imp_surj_Bool {K : Type} [Semiring K] [pos : PosSemiring K] [dec : DecidableEq K] : K →+* Bool := by
+  let f (k : K) : Bool := decide (k ≠ 0)
+  have zero_of_f_false (k : K) (eq : f k = false) : k = 0 := by {
+    unfold f at eq; rw [decide_not, Bool.not_eq_false'] at eq
+    apply of_decide_eq_true eq
+  }
+  have add_eq_or {b1 b2 : Bool} : b1 + b2 = or b1 b2 := by rfl
+  have mul_eq_and {b1 b2 : Bool} : b1 * b2 = and b1 b2 := by rfl
   have map_one : f 1 = true :=
     by unfold f; rw [decide_eq_true_eq]; exact pos.zero_ne_one
   have map_zero : f 0 = false :=
     by unfold f; apply decide_eq_false; aesop
-  have map_add : ∀ (a b : K), f (a + b) = f a + f b := by
-    intro a b;
+  have map_add (a b : K) : f (a + b) = f a + f b := by {
     rcases (Decidable.em (f a = true)) with fa_t | fa_f
     . rcases (Decidable.em (f b = true)) with fb_t | fb_f
-      . rw [fa_t, fb_t]; unfold f at *; sorry
+      . rw [fa_t, fb_t]; unfold f at *; simp
+        rw [decide_eq_true_eq] at *
+        rw [add_eq_or]; simp; intro H
+        cases (pos.eq_zero_or_eq_zero_of_add_eq_zero H) with
+        | inl l => contradiction
+        | inr r => contradiction
       . rw [fa_t]; unfold f at *;
-        rw [Bool.not_eq_true, decide_not, Bool.not_eq_false'] at fb_f
-        apply of_decide_eq_true at fb_f; subst b; rw [add_zero, fa_t]
-        simp; rewrite [Bool.true_or]
+        rw [Bool.not_eq_true] at fb_f
+        apply zero_of_f_false at fb_f; subst b; rw [add_zero, fa_t]
+        simp; change ((true || false) = true); simp
+    . rcases (Decidable.em (f b = true)) with fb_t | fb_f
+      . rw [Bool.not_eq_true] at fa_f; apply zero_of_f_false at fa_f;
+        subst fa_f; rw [zero_add, map_zero, fb_t]; rfl
+      . rw [Bool.not_eq_true] at *
+        apply zero_of_f_false at fa_f; apply zero_of_f_false at fb_f
+        subst a b; rw [add_zero, map_zero]; rfl
+  }
+  have map_mul (a b : K) : f (a * b) = f a * f b := by {
+    rcases (Decidable.em (f a = true)) with fa_t | fa_f
+    . rcases (Decidable.em (f b = true)) with fb_t | fb_f
+      . rw [fa_t, fb_t]; unfold f at *; simp
+        rw [decide_eq_true_eq] at *
+        rw [mul_eq_and]; simp; aesop
+      . rw [fa_t]; unfold f at *;
+        rw [Bool.not_eq_true] at fb_f
+        apply zero_of_f_false at fb_f; subst b; rw [mul_zero]; rfl
+    . rcases (Decidable.em (f b = true)) with fb_t | fb_f
+      . rw [Bool.not_eq_true] at fa_f; apply zero_of_f_false at fa_f;
+        subst fa_f; rw [zero_mul, map_zero, fb_t]; rfl
+      . rw [Bool.not_eq_true] at *
+        apply zero_of_f_false at fa_f; apply zero_of_f_false at fb_f
+        subst a b; rw [mul_zero, map_zero]; rfl
+  }
+  exact {
+    toFun := f,
+    map_one' := map_one,
+    map_zero' := map_zero,
+    map_add' := map_add,
+    map_mul' := map_mul
+  }
