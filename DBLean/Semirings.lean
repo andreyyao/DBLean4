@@ -254,3 +254,39 @@ def positive_imp_surj_Bool {K : Type} [Semiring K] [pos : Positive K] [dec : Dec
         rw [Bool.not_eq_true, decide_not, Bool.not_eq_false'] at fb_f
         apply of_decide_eq_true at fb_f; subst b; rw [add_zero, fa_t]
         simp; rewrite [Bool.true_or]
+
+
+/-Theorem 6.4 first part only: For all K, ℕ[X] => K-/
+section PolynomialEvaluationTheorem
+  universe u v
+
+  def Valuation (X : Type u) (K : Type v) [CommSemiring K] := X → K
+
+ -- TODO: re-use countable set of variables X defined in provenance section above
+  theorem polynomial_evaluation_homomorphism
+    {X : Type u} {K : Type v} [CommSemiring K]
+    (v : Valuation X K) :
+    ∃! (eval_v : MvPolynomial X ℕ →+* K), (∀ x, eval_v (MvPolynomial.X x) = v x) :=
+begin
+    -- Define the evaluation map for multivariate polynomials
+    let Eval_v : NatProvPolynomial X →+* K := MvPolynomial.eval₂ (RingHom.id ℕ) v,
+    -- Existence part
+    use Eval_v,
+    split,
+    {
+      intro x,
+      simp [MvPolynomial.eval₂_X], },
+    {
+      intros Eval_v' h,
+      ext p,
+      induction p using MvPolynomial.induction_on with c m p q hp hq,
+      { -- Case: constant polynomials
+        simp only [MvPolynomial.eval₂_C, RingHom.map_nat_cast, h], },
+      { -- Case: monomials (single-variable terms)
+        simp only [MvPolynomial.eval₂_monomial, h], },
+      { -- Case: addition
+        simp only [MvPolynomial.eval₂_add, hp, hq], }
+    }
+  end
+
+end PolynomialEvaluationTheorem
