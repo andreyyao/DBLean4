@@ -1,11 +1,13 @@
 import Mathlib.Order.Monotone.Basic
 import Mathlib.Algebra.Ring.Hom.Defs
 import Mathlib.Algebra.Ring.Nat
+import Mathlib.Algebra.Quotient
 import Mathlib.Algebra.Polynomial.Basic
 import Mathlib.Algebra.MvPolynomial.Basic
 import Mathlib.Algebra.MvPolynomial.Degrees
 import Mathlib.Algebra.MvPolynomial.Rename
 import Mathlib.Algebra.MvPolynomial.Equiv
+import Mathlib.RingTheory.Ideal.Quotient
 import Mathlib.RingTheory.Polynomial.Basic
 
 /-!
@@ -235,9 +237,41 @@ section provenance
 
   noncomputable instance : CommSemiring (BoolProvPolynomial X) := AddMonoidAlgebra.commSemiring
 
+
+
+  /- Given a monomial n*X1^{e1}*X2^{e2}*..., return n*X1*X2*... -/
+  noncomputable
+  def drop_exponents_monomial {X : Type} (s : X →₀ ℕ) (c : ℕ) : NatProvPolynomial X :=
+    let drop_exponents_power (s : X →₀ ℕ) : X →₀ ℕ :=
+    { support := s.support
+      toFun := fun x => min (s x) 1
+      mem_support_toFun := by intro x; apply Iff.intro <;> simp }
+    MvPolynomial.monomial (drop_exponents_power s) c
+
+  /-- Extends the exponent-dropping to MvPolynomials -/
+  noncomputable
+  def drop_exponents {X : Type} (p : NatProvPolynomial X) : NatProvPolynomial X :=
+    p.sum (drop_exponents_monomial)
+
+  -- The congruence relation on ℕ[X] used to construct Trio[X]
+  noncomputable
+  def NatPolyCongruence : RingCon (NatProvPolynomial X) where
+    r := fun p q => drop_exponents p = drop_exponents q
+    iseqv := { refl := by aesop, symm := by aesop, trans := by aesop }
+    add' := by
+      intros w x y z wRx yRz; simp at *
+      sorry
+    mul' := by
+      intros w x y z wRx yRz; simp at *
+      sorry
+
+    /-- Trio[X] is the quotient of ℕ[X] by the "same exponent
+    after drop" congruence relation -/
+    def Trio := RingCon.Quotient (NatPolyCongruence X)
+
 end provenance
 
-/-- All positive semirings have a homomorphism onto Bool -/
+/-- All positive semirings have an epimorphism onto Bool -/
 def positive_imp_surj_Bool {K : Type} [Semiring K] [pos : PosSemiring K] [dec : DecidableEq K] : K →+* Bool := by
   let f (k : K) : Bool := decide (k ≠ 0)
   have zero_of_f_false (k : K) (eq : f k = false) : k = 0 := by {
