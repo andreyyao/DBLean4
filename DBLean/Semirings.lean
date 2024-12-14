@@ -1,4 +1,5 @@
 import Mathlib.Order.Monotone.Basic
+import Mathlib.Data.Set.Basic
 import Mathlib.Algebra.Ring.Hom.Defs
 import Mathlib.Algebra.Ring.Nat
 import Mathlib.Algebra.Quotient
@@ -70,21 +71,21 @@ def Bool.nsmul : Nat -> Bool -> Bool
 @[default_instance]
 instance Bool.instSemiring : CommSemiring Bool where
   add := or
-  add_assoc := by intros; exact Bool.or_assoc _ _ _
+  add_assoc := Bool.or_assoc
   zero := false
-  zero_add := by intros; exact Bool.false_or _
-  add_zero := by intros; exact Bool.or_false _
-  add_comm := by intros; exact Bool.or_comm _ _
+  zero_add := Bool.false_or
+  add_zero := Bool.or_false
+  add_comm := Bool.or_comm
   mul := and
-  mul_assoc := by intros; exact Bool.and_assoc _ _ _
-  mul_comm := by intros; exact Bool.and_comm _ _
+  mul_assoc := Bool.and_assoc
+  mul_comm := Bool.and_comm
   one := true
-  one_mul := by intros; exact Bool.true_and _
-  mul_one := by intros; exact Bool.and_true _
-  left_distrib := by intros; exact Bool.and_or_distrib_left _ _ _
-  right_distrib := by intros; exact Bool.and_or_distrib_right _ _ _
-  zero_mul := by intros; exact Bool.false_and _
-  mul_zero := by intros; exact Bool.and_false _
+  one_mul := Bool.true_and
+  mul_one := Bool.and_true
+  left_distrib := Bool.and_or_distrib_left
+  right_distrib := Bool.and_or_distrib_right
+  zero_mul := Bool.false_and
+  mul_zero := Bool.and_false
   nsmul := Bool.nsmul
   nsmul_zero := by intro b; rfl
   nsmul_succ := by intros n b; simp; rw [Bool.or_comm]; rfl
@@ -238,7 +239,6 @@ section provenance
   noncomputable instance : CommSemiring (BoolProvPolynomial X) := AddMonoidAlgebra.commSemiring
 
 
-
   /- Given a monomial n*X1^{e1}*X2^{e2}*..., return n*X1*X2*... -/
   noncomputable
   def drop_exponents_monomial {X : Type} (s : X →₀ ℕ) (c : ℕ) : NatProvPolynomial X :=
@@ -265,9 +265,9 @@ section provenance
       intros w x y z wRx yRz; simp at *
       sorry
 
-    /-- Trio[X] is the quotient of ℕ[X] by the "same exponent
-    after drop" congruence relation -/
-    def Trio := RingCon.Quotient (NatPolyCongruence X)
+  /-- Trio[X] is the quotient of ℕ[X] by the "same exponent
+  after drop" congruence relation -/
+  def Trio := RingCon.Quotient (NatPolyCongruence X)
 
 end provenance
 
@@ -327,3 +327,53 @@ def positive_imp_surj_Bool {K : Type} [Semiring K] [pos : PosSemiring K] [dec : 
     map_add' := map_add,
     map_mul' := map_mul
   }
+
+/-- Why(X) provenance is the double power set of X -/
+def Why (X : Type) := Set (Set X)
+
+instance Why.instCommSemiring {X : Type} : CommSemiring (Why X) where
+  add := Set.union
+  add_assoc := Set.union_assoc
+  zero := (∅ : Set (Set X))
+  zero_add := Set.empty_union
+  add_zero := Set.union_empty
+  add_comm := Set.union_comm
+  mul := fun (S1 S2 : Set (Set X)) => { s | ∃ s1 ∈ S1, ∃ s2 ∈ S2, s = s1 ∪ s2}
+  mul_comm := by
+    intros A B; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
+    apply Set.ext; intro x; rw [Set.mem_setOf_eq]; rw [Set.mem_setOf_eq]
+    apply Iff.intro
+    . rintro ⟨a1, ⟨a1_mem, ⟨b1, ⟨b1_mem, eq1⟩⟩⟩⟩; aesop
+    . rintro ⟨b1, ⟨b1_mem, ⟨a1, ⟨a1_mem, eq1⟩⟩⟩⟩; aesop
+  mul_assoc := by
+    intros A B C; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
+    apply Set.ext; intro x; rw [Set.mem_setOf_eq]; rw [Set.mem_setOf_eq]
+    apply Iff.intro
+    . rintro ⟨y, ⟨⟨a1, ⟨a1_mem, ⟨b1, ⟨b1_mem, eq1⟩⟩⟩⟩, ⟨c1, ⟨c1_mem, eq2⟩⟩⟩⟩
+      exists a1; split_ands; exact a1_mem; exists (b1 ∪ c1)
+      split_ands
+      . exists b1; split_ands; exact b1_mem; exists c1
+      . aesop
+    . rintro ⟨a1, ⟨a1_mem, ⟨y, ⟨⟨b1, ⟨b1_mem, ⟨c1, ⟨c1_mem, eq1⟩⟩⟩⟩, eq2⟩⟩⟩⟩
+      exists (a1 ∪ b1)
+      split_ands
+      . exists a1; split_ands; exact a1_mem
+        exists b1
+      . exists c1; split_ands; exact c1_mem; aesop
+  zero_mul := by
+    intro S; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
+    apply Set.eq_empty_iff_forall_not_mem.mpr
+    intro T; simp; aesop
+  mul_zero := by
+    intro S; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
+    apply Set.eq_empty_iff_forall_not_mem.mpr
+    intro T; simp; aesop
+  one := Set.singleton ∅
+  mul_one := by
+    intros A; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
+    apply Set.ext; intro x; rw [Set.mem_setOf_eq]; apply Iff.intro
+    . rintro ⟨a, ⟨a_mem, ⟨e, ⟨e_mem, eq⟩⟩⟩⟩
+      apply Set.mem_singleton_iff.mp at e_mem; aesop
+    . intro x_mem; exists x; split_ands; exact x_mem; exists ∅; aesop
+  one_mul := by
+    intros A; rw [mul_comm] -- Why doesn't this work?
