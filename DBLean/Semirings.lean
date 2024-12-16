@@ -328,25 +328,46 @@ def positive_imp_surj_Bool {K : Type} [Semiring K] [pos : PosSemiring K] [dec : 
     map_mul' := map_mul
   }
 
-/-- Why(X) provenance is the double power set of X -/
-def Why (X : Type) := Set (Set X)
 
-instance Why.instCommSemiring {X : Type} : CommSemiring (Why X) where
+variable {X : Type}
+
+@[simp]
+abbrev Why (X : Type) := Set (Set X)
+
+instance Why.instZero : Zero (Why X) where
+  zero := (∅ : Set (Set X))
+
+instance Why.instAdd : Add (Why X) where
+  add := Set.union
+
+lemma Why.add_def {A B : Why X} : A + B = A ∪ B := by rfl
+
+instance Why.instAddCommMonoid : AddCommMonoid (Why X) where
   add := Set.union
   add_assoc := Set.union_assoc
   zero := (∅ : Set (Set X))
   zero_add := Set.empty_union
   add_zero := Set.union_empty
+  nsmul := nsmulRec
   add_comm := Set.union_comm
-  mul := fun (S1 S2 : Set (Set X)) => { s | ∃ s1 ∈ S1, ∃ s2 ∈ S2, s = s1 ∪ s2}
+
+instance Why.instOne : One (Why X) where
+  one := Set.singleton ∅
+
+instance Why.instMul : Mul (Why X) where
+  mul := fun (A B : Set (Set X)) => { s | ∃ a ∈ A, ∃ b ∈ B, s = a ∪ b}
+
+lemma Why.mul_def {A B : Why X} : A * B = { s | ∃ a ∈ A, ∃ b ∈ B, s = a ∪ b} := by rfl
+
+instance Why.instCommMonoid : CommMonoid (Why X) where
   mul_comm := by
-    intros A B; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
+    intros A B; repeat rw [Why.mul_def]
     apply Set.ext; intro x; rw [Set.mem_setOf_eq]; rw [Set.mem_setOf_eq]
     apply Iff.intro
-    . rintro ⟨a1, ⟨a1_mem, ⟨b1, ⟨b1_mem, eq1⟩⟩⟩⟩; aesop
-    . rintro ⟨b1, ⟨b1_mem, ⟨a1, ⟨a1_mem, eq1⟩⟩⟩⟩; aesop
+    . rintro ⟨a1, a1_mem, b1, b1_mem, eq1⟩; aesop
+    . rintro ⟨b1, b1_mem, a1, a1_mem, eq1⟩; aesop
   mul_assoc := by
-    intros A B C; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
+    intros A B C; repeat rw [Why.mul_def]
     apply Set.ext; intro x; rw [Set.mem_setOf_eq]; rw [Set.mem_setOf_eq]
     apply Iff.intro
     . rintro ⟨y, ⟨⟨a1, ⟨a1_mem, ⟨b1, ⟨b1_mem, eq1⟩⟩⟩⟩, ⟨c1, ⟨c1_mem, eq2⟩⟩⟩⟩
@@ -360,20 +381,49 @@ instance Why.instCommSemiring {X : Type} : CommSemiring (Why X) where
       . exists a1; split_ands; exact a1_mem
         exists b1
       . exists c1; split_ands; exact c1_mem; aesop
-  zero_mul := by
-    intro S; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
-    apply Set.eq_empty_iff_forall_not_mem.mpr
-    intro T; simp; aesop
-  mul_zero := by
-    intro S; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
-    apply Set.eq_empty_iff_forall_not_mem.mpr
-    intro T; simp; aesop
-  one := Set.singleton ∅
   mul_one := by
-    intros A; unfold HMul.hMul; unfold instHMul; unfold Mul.mul; simp
-    apply Set.ext; intro x; rw [Set.mem_setOf_eq]; apply Iff.intro
-    . rintro ⟨a, ⟨a_mem, ⟨e, ⟨e_mem, eq⟩⟩⟩⟩
-      apply Set.mem_singleton_iff.mp at e_mem; aesop
+    intros A; apply Set.ext; intro x; apply Iff.intro
+    . rintro ⟨a, a_mem, e, e_mem, eq⟩
+      rw [Set.mem_singleton_iff.mp e_mem] at eq; aesop
     . intro x_mem; exists x; split_ands; exact x_mem; exists ∅; aesop
   one_mul := by
-    intros A; rw [mul_comm] -- Why doesn't this work?
+    intros A; apply Set.ext; intro x; apply Iff.intro
+    . rintro ⟨a, a_mem, e, e_mem, eq⟩
+      rw [Set.mem_singleton_iff.mp a_mem] at eq; aesop
+    . intro x_mem; exists ∅; split_ands; rfl; exists x; aesop
+
+instance Why.instCommSemiring : CommSemiring (Why X) where
+  zero_mul := by
+    intros A; rw [Why.mul_def]
+    apply Set.ext; intro x; rw [Set.mem_setOf_eq]
+    apply Iff.intro <;> rintro ⟨z, ⟨z_mem, _⟩⟩; contradiction
+  mul_zero := by
+    intros A; rw [Why.mul_def]
+    apply Set.ext; intro x; rw [Set.mem_setOf_eq]
+    apply Iff.intro <;> rintro ⟨_, ⟨_, ⟨z, ⟨z_mem,  _⟩ ⟩⟩⟩; contradiction
+  left_distrib := by
+    intros A B C; repeat rw [Why.mul_def]; repeat rw [Why.add_def]
+    apply Set.ext; intro x; apply Iff.intro
+    . rw [Set.mem_setOf_eq]
+      rintro ⟨a, a_mem, bc, bc_mem, eq⟩
+      cases bc_mem with
+      | inl bc_b => left; rw [Set.mem_setOf_eq]; aesop
+      | inr bc_c => right; rw [Set.mem_setOf_eq]; aesop
+    . intro x_mem; cases x_mem with
+      | inl bc_b => rw [Set.mem_setOf_eq] at *; aesop
+      | inr bc_c => rw [Set.mem_setOf_eq] at *; aesop
+  right_distrib := by
+    intros A B C; repeat rw [Why.mul_def]; repeat rw [Why.add_def]
+    apply Set.ext; intro x; apply Iff.intro
+    . rw [Set.mem_setOf_eq]
+      rintro ⟨ab, ab_mem, c, c_mem, eq⟩
+      cases ab_mem with
+      | inl ab_a => left; rw [Set.mem_setOf_eq]; aesop
+      | inr ab_b => right; rw [Set.mem_setOf_eq]; aesop
+    . intro x_mem; cases x_mem with
+      | inl ab_a => rw [Set.mem_setOf_eq] at *; aesop
+      | inr ab_b => rw [Set.mem_setOf_eq] at *; aesop
+  mul_comm := mul_comm
+  mul_assoc := mul_assoc
+  mul_one := mul_one
+  one_mul := one_mul
